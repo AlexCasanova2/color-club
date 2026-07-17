@@ -99,7 +99,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
     setBusy(null);
   }
 
-  if (loading || !challenge || !me) return <Screen><Header title="RETO" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /><ErrorText message={error} /></Screen>;
+  if (loading || !challenge || !me) return <Screen><Header title="Reto" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /><ErrorText message={error} /></Screen>;
 
   const completed = me.photos?.length ?? 0;
   const submitted = participants.filter((participant) => participant.status === 'submitted').length;
@@ -107,7 +107,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   if (challenge.status === 'active' && me.status === 'pending') {
     return (
       <Screen>
-        <Header title="TU RETO" onBack={onBack} />
+        <Header title="Tu reto" onBack={onBack} />
         <View style={styles.challengeHeading}>
           <View style={[styles.bigSwatch, { backgroundColor: challenge.shared_color ?? colors.line }]} />
           <View style={styles.headingText}><Eyebrow>Quedan {remaining(challenge.ends_at)}</Eyebrow><Title size="medium">Caza este color</Title></View>
@@ -126,7 +126,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
             );
           })}
         </View>
-        <Text style={styles.progress}>{completed}/6 FOTOS LISTAS</Text>
+        <Text style={styles.progress}>{completed} de 6 fotos listas</Text>
         <ErrorText message={error} />
         <Button label="Enviar collage definitivo" onPress={finalize} disabled={completed !== 6} loading={busy === 'submit'} />
       </Screen>
@@ -136,10 +136,10 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   if (challenge.status === 'active' || challenge.status === 'configuring') {
     return (
       <Screen>
-        <Header title="ESPERANDO" onBack={onBack} />
+        <Header title="Esperando" onBack={onBack} />
         <View style={styles.centerHero}><Eyebrow>Quedan {remaining(challenge.ends_at)}</Eyebrow><Title>Ya está.</Title><Body muted>Tu collage está cerrado. Ahora toca esperar al resto del club.</Body></View>
         <Text style={styles.counter}>{submitted}/{participants.length}</Text>
-        <Text style={styles.counterLabel}>COLLAGES ENVIADOS</Text>
+        <Text style={styles.counterLabel}>collages enviados</Text>
         <View style={styles.people}>
           {participants.map((participant) => (
             <View key={participant.id} style={styles.person}>
@@ -157,17 +157,17 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
     const candidates = participants.filter((participant) => participant.user_id !== userId);
     return (
       <Screen>
-        <Header title="VOTACIÓN" onBack={onBack} />
+        <Header title="Votación" onBack={onBack} />
         <View style={styles.heading}><Eyebrow>Un voto. Sin marcha atrás.</Eyebrow><Title>Tu favorito</Title><Body muted>Elige el collage que mejor captura el color del reto.</Body></View>
         {me.status === 'disqualified' && <Card style={styles.notice}><Body>No completaste el reto, así que esta vez no puedes votar.</Body></Card>}
         {votedId && <Card style={styles.notice}><Body>Voto enviado. El resultado aparecerá cuando cierre la votación.</Body></Card>}
         <View style={styles.candidates}>
           {candidates.map((participant) => (
             <Card key={participant.id} style={participant.status === 'disqualified' ? styles.disqualified : undefined}>
-              <View style={styles.candidateHeader}><Text style={styles.candidateName}>{participant.profiles.display_name}</Text><Text style={styles.candidateState}>{participant.status === 'disqualified' ? '✕ NO COMPLETÓ' : ''}</Text></View>
+              <View style={styles.candidateHeader}><Text style={styles.candidateName}>{participant.profiles.display_name}</Text><Text style={styles.candidateState}>{participant.status === 'disqualified' ? 'No completó' : ''}</Text></View>
               {participant.status === 'submitted' && <Collage participant={participant} />}
               {participant.status === 'submitted' && !votedId && me.status === 'submitted' && <Button label="Este es mi voto" onPress={() => vote(participant.id)} loading={busy === 'vote'} />}
-              {votedId === participant.id && <Text style={styles.yourVote}>TU VOTO</Text>}
+              {votedId === participant.id && <Text style={styles.yourVote}>Tu voto</Text>}
             </Card>
           ))}
         </View>
@@ -184,7 +184,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   let previousPosition = 0;
   return (
     <Screen>
-      <Header title="RESULTADOS" onBack={onBack} />
+      <Header title="Resultados" onBack={onBack} />
       <View style={styles.heading}><Eyebrow>Reto cerrado</Eyebrow><Title>El veredicto</Title><Body muted>Los votos están a la vista. Los empates comparten posición.</Body></View>
       <View style={styles.results}>
         {ordered.map((participant, index) => {
@@ -207,39 +207,39 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
 
 const styles = StyleSheet.create({
   loader: { marginTop: 100 },
-  heading: { marginVertical: 20, gap: 8 },
-  challengeHeading: { flexDirection: 'row', alignItems: 'center', gap: 16, marginVertical: 24 },
+  heading: { marginVertical: 24, gap: 8 },
+  challengeHeading: { flexDirection: 'row', alignItems: 'center', gap: 18, marginVertical: 26 },
   headingText: { flex: 1 },
-  bigSwatch: { width: 74, height: 74, borderRadius: 37, borderWidth: 2, borderColor: colors.ink },
-  editGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3, marginVertical: 24 },
-  editSlot: { width: '33.333%', aspectRatio: 1, padding: 3, backgroundColor: colors.line, borderWidth: 3, borderColor: colors.paper, justifyContent: 'center', alignItems: 'center' },
-  editImage: { position: 'absolute', inset: 3 },
+  bigSwatch: { width: 68, height: 68, borderRadius: 34 },
+  editGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginVertical: 26 },
+  editSlot: { width: '33.333%', aspectRatio: 1, padding: 4, backgroundColor: colors.line, borderWidth: 4, borderColor: colors.paper, borderRadius: 10, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  editImage: { position: 'absolute', inset: 4 },
   plus: { color: colors.muted, fontSize: 34, fontWeight: '300' },
-  slotNumber: { position: 'absolute', left: 9, bottom: 7, color: colors.white, backgroundColor: colors.ink, paddingHorizontal: 4, fontSize: 10, fontWeight: '900' },
+  slotNumber: { position: 'absolute', left: 10, bottom: 8, color: colors.white, backgroundColor: '#191918BB', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2, fontSize: 10, fontWeight: '600' },
   imageLoader: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#00000066', alignItems: 'center', justifyContent: 'center' },
-  progress: { textAlign: 'center', color: colors.muted, fontSize: 12, fontWeight: '900', letterSpacing: 1.3, marginBottom: 14 },
+  progress: { textAlign: 'center', color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 16 },
   centerHero: { alignItems: 'center', gap: 12, marginTop: 55 },
-  counter: { textAlign: 'center', color: colors.ink, fontSize: 72, fontWeight: '900', marginTop: 40 },
-  counterLabel: { textAlign: 'center', color: colors.coral, fontSize: 11, fontWeight: '900', letterSpacing: 1.5 },
-  people: { marginTop: 35, borderTopWidth: 2, borderTopColor: colors.ink },
+  counter: { textAlign: 'center', color: colors.ink, fontSize: 64, fontWeight: '700', letterSpacing: -2, marginTop: 40 },
+  counterLabel: { textAlign: 'center', color: colors.muted, fontSize: 13, fontWeight: '500' },
+  people: { marginTop: 35, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 16, paddingHorizontal: 16 },
   person: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.line, gap: 12 },
   statusDot: { width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: colors.muted },
   statusDone: { backgroundColor: colors.green, borderColor: colors.green },
-  personName: { flex: 1, color: colors.ink, fontWeight: '800' },
+  personName: { flex: 1, color: colors.ink, fontWeight: '600' },
   personStatus: { color: colors.muted, fontSize: 12 },
-  notice: { marginBottom: 16, borderLeftWidth: 5, borderLeftColor: colors.yellow },
+  notice: { marginBottom: 16, borderLeftWidth: 3, borderLeftColor: colors.yellow },
   candidates: { gap: 18 },
   candidateHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
-  candidateName: { color: colors.ink, fontSize: 18, fontWeight: '900' },
-  candidateState: { color: colors.danger, fontSize: 10, fontWeight: '900' },
+  candidateName: { color: colors.ink, fontSize: 18, fontWeight: '600' },
+  candidateState: { color: colors.danger, fontSize: 12, fontWeight: '600' },
   collage: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
-  collagePhoto: { width: '33.333%', aspectRatio: 1, borderWidth: 1.5, borderColor: colors.surface },
+  collagePhoto: { width: '33.333%', aspectRatio: 1, borderWidth: 1, borderColor: colors.surface },
   photoMissing: { backgroundColor: colors.line },
   disqualified: { opacity: 0.52 },
-  yourVote: { color: colors.green, textAlign: 'center', fontWeight: '900', letterSpacing: 1.4, marginTop: 5 },
+  yourVote: { color: colors.green, textAlign: 'center', fontWeight: '600', marginTop: 5 },
   results: { gap: 16 },
   resultHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  resultPosition: { color: colors.coral, fontSize: 34, fontWeight: '900', width: 65 },
+  resultPosition: { color: colors.muted, fontSize: 30, fontWeight: '600', width: 65 },
   resultIdentity: { flex: 1 },
   voteCount: { color: colors.muted, marginTop: 3 },
   voters: { color: colors.muted, fontSize: 12, lineHeight: 18 },

@@ -26,8 +26,8 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
 
   return (
     <Screen>
-      <Header title="NUEVO RETO" onBack={onBack} />
-      <View style={styles.heading}><Eyebrow>Paso 1 de 1</Eyebrow><Title>Elige las reglas</Title><Body muted>En v1 todo el club buscará el mismo color.</Body></View>
+      <Header title="Nuevo reto" onBack={onBack} />
+      <View style={styles.heading}><Eyebrow>Configuración</Eyebrow><Title>Elige las reglas</Title><Body muted>Todo el club buscará el mismo color.</Body></View>
       <Text style={styles.label}>Color compartido</Text>
       <View style={styles.palette}>
         {colorChoices.map((choice) => (
@@ -36,7 +36,7 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
           </Pressable>
         ))}
       </View>
-      <Text style={styles.label}>Tiempo para encontrar 6 fotos</Text>
+      <Text style={styles.label}>Tiempo para encontrar seis fotos</Text>
       <View style={styles.durationList}>
         {durations.map((item) => (
           <Pressable key={item.value} onPress={() => setDuration(item.value)} style={[styles.duration, duration === item.value && styles.durationSelected]}>
@@ -55,18 +55,18 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
 }
 
 const styles = StyleSheet.create({
-  heading: { marginVertical: 20, gap: 8 },
-  label: { color: colors.ink, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 25, marginBottom: 12 },
-  palette: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  colorOption: { width: 62, height: 62, borderRadius: 31, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.line },
-  colorSelected: { borderWidth: 4, borderColor: colors.ink },
-  check: { color: colors.white, fontSize: 22, fontWeight: '900' },
+  heading: { marginVertical: 24, gap: 8 },
+  label: { color: colors.muted, fontSize: 13, fontWeight: '600', marginTop: 28, marginBottom: 14 },
+  palette: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  colorOption: { width: 54, height: 54, borderRadius: 27, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.line },
+  colorSelected: { borderWidth: 3, borderColor: colors.ink },
+  check: { color: colors.white, fontSize: 19, fontWeight: '700' },
   checkDark: { color: colors.ink },
   durationList: { flexDirection: 'row', gap: 8 },
-  duration: { flex: 1, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, paddingVertical: 17, alignItems: 'center' },
+  duration: { flex: 1, borderWidth: 1, borderColor: colors.line, borderRadius: 14, backgroundColor: colors.surface, paddingVertical: 17, alignItems: 'center' },
   durationSelected: { borderColor: colors.ink, backgroundColor: colors.ink },
-  durationText: { color: colors.ink, fontWeight: '800', fontSize: 13 },
+  durationText: { color: colors.ink, fontWeight: '600', fontSize: 13 },
   durationTextSelected: { color: colors.white },
-  summary: { marginVertical: 28, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line, paddingVertical: 18, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  summary: { marginVertical: 28, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 14, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 12 },
   summaryColor: { width: 26, height: 26, borderRadius: 13 },
 });

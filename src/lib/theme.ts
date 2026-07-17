@@ -1,15 +1,15 @@
 export const colors = {
-  ink: '#20201E',
-  paper: '#F5F0E8',
-  surface: '#FFFCF7',
-  line: '#D9D1C5',
-  muted: '#716B63',
-  coral: '#F06449',
-  cobalt: '#3157D5',
-  yellow: '#F4C542',
-  green: '#3A8D67',
+  ink: '#191918',
+  paper: '#F6F6F2',
+  surface: '#FFFFFF',
+  line: '#E2E2DC',
+  muted: '#73736C',
+  coral: '#315AE8',
+  cobalt: '#315AE8',
+  yellow: '#E8C84A',
+  green: '#287A55',
   white: '#FFFFFF',
-  danger: '#B83B32',
+  danger: '#B84038',
 };
 
 export const colorChoices = [

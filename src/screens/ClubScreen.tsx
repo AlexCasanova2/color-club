@@ -45,15 +45,15 @@ export function ClubScreen({
 
   useEffect(() => { void load(); }, [clubId]);
 
-  if (loading || !club) return <Screen><Header title="CLUB" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /></Screen>;
+  if (loading || !club) return <Screen><Header title="Club" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /></Screen>;
 
   return (
     <Screen>
-      <Header title={club.name.toUpperCase()} onBack={onBack} />
+      <Header title={club.name} onBack={onBack} />
       <View style={styles.heading}>
         <Eyebrow>Temporada actual</Eyebrow>
         <Title>{club.name}</Title>
-        <Pressable><Text selectable style={styles.code}>INVITA CON {club.invite_code}</Text></Pressable>
+        <Pressable><Text selectable style={styles.code}>Código de invitación · {club.invite_code}</Text></Pressable>
       </View>
       <ErrorText message={error} />
       {challenge && challenge.status !== 'closed' ? (
@@ -76,7 +76,7 @@ export function ClubScreen({
       {challenge?.status === 'closed' && <Button label="Ver último resultado" onPress={() => onChallenge(challenge.id)} variant="secondary" />}
       {challenge?.status === 'closed' && club.admin_id === userId && <Button label="Lanzar un nuevo reto" onPress={onNewChallenge} />}
       <View style={styles.rankingHeader}>
-        <Eyebrow>Marcador</Eyebrow>
+        <Eyebrow>Clasificación</Eyebrow>
         <Text style={styles.rule}>1 voto = 1 punto</Text>
       </View>
       {ranking.length === 0 ? <Body muted>Aquí aparecerá el ranking al cerrar el primer reto.</Body> : ranking.map((row) => (
@@ -92,21 +92,21 @@ export function ClubScreen({
 
 const styles = StyleSheet.create({
   loader: { marginTop: 100 },
-  heading: { marginVertical: 20, gap: 6 },
-  code: { color: colors.cobalt, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, marginTop: 9 },
-  challenge: { backgroundColor: colors.ink, minHeight: 220, flexDirection: 'row', marginBottom: 18 },
-  colorBar: { width: 10 },
-  challengeContent: { flex: 1, padding: 20, justifyContent: 'space-between' },
+  heading: { marginVertical: 24, gap: 6 },
+  code: { color: colors.cobalt, fontSize: 13, fontWeight: '600', marginTop: 10 },
+  challenge: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 18, minHeight: 210, flexDirection: 'row', marginBottom: 18, overflow: 'hidden' },
+  colorBar: { width: 5 },
+  challengeContent: { flex: 1, padding: 22, justifyContent: 'space-between' },
   statusRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  status: { color: colors.yellow, fontSize: 11, fontWeight: '900', letterSpacing: 1.6 },
-  timer: { color: colors.white, fontWeight: '800' },
-  challengeTitle: { color: colors.white, fontSize: 28, fontWeight: '900', maxWidth: 260 },
-  swatch: { width: 44, height: 44, borderRadius: 22, borderWidth: 3, borderColor: colors.white },
+  status: { color: colors.coral, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  timer: { color: colors.muted, fontWeight: '600' },
+  challengeTitle: { color: colors.ink, fontSize: 26, lineHeight: 31, fontWeight: '700', maxWidth: 260 },
+  swatch: { width: 42, height: 42, borderRadius: 21 },
   pressed: { opacity: 0.8 },
-  rankingHeader: { marginTop: 38, paddingBottom: 8, borderBottomWidth: 2, borderBottomColor: colors.ink, flexDirection: 'row', justifyContent: 'space-between' },
+  rankingHeader: { marginTop: 38, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.line, flexDirection: 'row', justifyContent: 'space-between' },
   rule: { color: colors.muted, fontSize: 12 },
   rankRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.line },
-  position: { width: 42, color: colors.coral, fontWeight: '900' },
-  name: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: '800' },
-  points: { color: colors.ink, fontWeight: '900' },
+  position: { width: 42, color: colors.muted, fontWeight: '600' },
+  name: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: '600' },
+  points: { color: colors.ink, fontWeight: '600' },
 });

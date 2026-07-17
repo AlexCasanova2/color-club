@@ -21,7 +21,7 @@ function SetupScreen() {
   return (
     <Screen>
       <View style={styles.setup}>
-        <View style={styles.mark}><View style={[styles.dot, { backgroundColor: colors.coral }]} /><View style={[styles.dot, { backgroundColor: colors.yellow }]} /><View style={[styles.dot, { backgroundColor: colors.cobalt }]} /></View>
+        <View style={styles.mark}><View style={[styles.dot, { backgroundColor: colors.coral }]} /><View style={[styles.dot, { backgroundColor: colors.yellow }]} /><View style={[styles.dot, { backgroundColor: colors.green }]} /></View>
         <Title>Color Club</Title>
         <Card style={styles.setupCard}>
           <Text style={styles.step}>CONFIGURACIÓN NECESARIA</Text>
@@ -90,8 +90,8 @@ export default function App() {
 const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper },
   setup: { flex: 1, justifyContent: 'center', gap: 25 },
-  mark: { flexDirection: 'row', gap: 7 },
-  dot: { width: 22, height: 22, borderRadius: 11 },
+  mark: { flexDirection: 'row', gap: 5 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
   setupCard: { gap: 16 },
   step: { color: colors.coral, fontSize: 11, fontWeight: '900', letterSpacing: 1.3 },
   code: { fontFamily: 'monospace', fontWeight: '700' },

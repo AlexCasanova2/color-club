@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Body, Button, ErrorText, Eyebrow, Field, Screen, Title } from '@/components/ui';
 import { colors } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
@@ -31,16 +31,16 @@ export function AuthScreen() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wrap}>
+      <View style={styles.wrap}>
         <View style={styles.mark}>
           <View style={[styles.dot, { backgroundColor: colors.coral }]} />
           <View style={[styles.dot, { backgroundColor: colors.yellow }]} />
           <View style={[styles.dot, { backgroundColor: colors.cobalt }]} />
         </View>
         <View>
-          <Eyebrow>Un color. Seis fotos.</Eyebrow>
-          <Title>Color{`\n`}Club</Title>
-          <Body muted>Retos fotográficos para ese grupo de amigos que nunca se pone de acuerdo.</Body>
+          <Eyebrow>Un color, seis fotos</Eyebrow>
+          <Title>Color Club</Title>
+          <Body muted>Un juego fotográfico para mirar con más atención junto a tus amigos.</Body>
         </View>
         <View style={styles.form}>
           {isSignUp && <Field label="Tu nombre" value={name} onChangeText={setName} autoCapitalize="words" />}
@@ -55,15 +55,15 @@ export function AuthScreen() {
             variant="quiet"
           />
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, justifyContent: 'center', gap: 32, paddingTop: 20 },
-  mark: { flexDirection: 'row', gap: 7 },
-  dot: { width: 22, height: 22, borderRadius: 11 },
-  form: { gap: 14 },
+  wrap: { flex: 1, justifyContent: 'center', gap: 38, paddingVertical: 30 },
+  mark: { flexDirection: 'row', gap: 5 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  form: { gap: 16 },
   message: { color: colors.green, lineHeight: 20 },
 });

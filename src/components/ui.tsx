@@ -1,6 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -16,7 +17,16 @@ import { colors } from '@/lib/theme';
 export function Screen({ children, scroll = true }: PropsWithChildren<{ scroll?: boolean }>) {
   return (
     <SafeAreaView style={styles.safe}>
-      {scroll ? <ScrollView contentContainerStyle={styles.screen}>{children}</ScrollView> : <View style={styles.screen}>{children}</View>}
+      {scroll ? (
+        <ScrollView
+          automaticallyAdjustKeyboardInsets
+          contentContainerStyle={styles.screen}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+        >
+          {children}
+        </ScrollView>
+      ) : <View style={styles.screen}>{children}</View>}
     </SafeAreaView>
   );
 }
@@ -97,29 +107,29 @@ export function ErrorText({ message }: { message: string | null }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.paper },
   screen: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 40 },
-  eyebrow: { color: colors.coral, fontSize: 12, fontWeight: '800', letterSpacing: 1.8, textTransform: 'uppercase', marginBottom: 8 },
-  title: { color: colors.ink, fontSize: 42, lineHeight: 44, fontWeight: '900', letterSpacing: -1.8 },
-  titleMedium: { fontSize: 28, lineHeight: 32, letterSpacing: -0.8 },
-  body: { color: colors.ink, fontSize: 16, lineHeight: 23 },
+  eyebrow: { color: colors.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.2, marginBottom: 8 },
+  title: { color: colors.ink, fontSize: 38, lineHeight: 42, fontWeight: '700', letterSpacing: -1.2 },
+  titleMedium: { fontSize: 26, lineHeight: 31, letterSpacing: -0.5 },
+  body: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   muted: { color: colors.muted },
-  card: { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1, borderRadius: 4, padding: 18 },
-  button: { minHeight: 52, borderRadius: 3, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.ink },
+  card: { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1, borderRadius: 16, padding: 20 },
+  button: { minHeight: 52, borderRadius: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.ink },
   primaryButton: { backgroundColor: colors.ink },
   secondaryButton: { backgroundColor: colors.surface },
-  quietButton: { borderColor: 'transparent', minHeight: 42 },
+  quietButton: { borderColor: 'transparent', minHeight: 44 },
   dangerButton: { backgroundColor: colors.surface, borderColor: colors.danger },
-  buttonText: { color: colors.ink, fontSize: 15, fontWeight: '800' },
+  buttonText: { color: colors.ink, fontSize: 15, fontWeight: '600' },
   primaryButtonText: { color: colors.white },
   dangerButtonText: { color: colors.danger },
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.75, transform: [{ translateY: 1 }] },
   fieldWrap: { gap: 7 },
-  label: { color: colors.ink, fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
-  input: { minHeight: 52, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 3, paddingHorizontal: 14, color: colors.ink, fontSize: 16 },
+  label: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+  input: { minHeight: 54, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 14, paddingHorizontal: 16, color: colors.ink, fontSize: 16 },
   header: { minHeight: 64, marginHorizontal: -2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerSide: { width: 82 },
   headerRight: { alignItems: 'flex-end' },
-  headerAction: { color: colors.cobalt, fontWeight: '800' },
-  headerTitle: { flex: 1, textAlign: 'center', color: colors.ink, fontWeight: '900', fontSize: 15 },
+  headerAction: { color: colors.ink, fontWeight: '600', fontSize: 14 },
+  headerTitle: { flex: 1, textAlign: 'center', color: colors.ink, fontWeight: '600', fontSize: 14 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
 });
