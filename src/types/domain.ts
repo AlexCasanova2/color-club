@@ -4,6 +4,8 @@ export type DurationPreset = '24h' | '48h' | '1week';
 export interface Profile {
   id: string;
   display_name: string;
+  username: string;
+  friend_code: string;
   avatar_url: string | null;
 }
 
@@ -65,4 +67,14 @@ export interface Vote {
 export interface ActivityItem extends Challenge {
   club_name: string;
   participant_status: Participant['status'];
+}
+
+export interface Friendship {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+  requester: Profile;
+  addressee: Profile;
 }

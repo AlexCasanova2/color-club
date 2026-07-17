@@ -1,6 +1,6 @@
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
-import type { ActivityItem, Challenge, Club, DurationPreset, Participant, Photo, RankingRow, Vote } from '@/types/domain';
+import type { ActivityItem, Challenge, Club, DurationPreset, Friendship, Participant, Photo, RankingRow, Vote } from '@/types/domain';
 
 function fail(error: { message: string } | null) {
   if (error) throw new Error(error.message);
@@ -35,6 +35,31 @@ export async function getActivity(userId: string): Promise<ActivityItem[]> {
       participant_status: ownParticipation.status,
     } as ActivityItem;
   });
+}
+
+export async function getFriendships(): Promise<Friendship[]> {
+  const { data, error } = await supabase
+    .from('friendships')
+    .select('*, requester:profiles!friendships_requester_id_fkey(*), addressee:profiles!friendships_addressee_id_fkey(*)')
+    .neq('status', 'declined')
+    .order('created_at', { ascending: false });
+  fail(error);
+  return (data ?? []) as unknown as Friendship[];
+}
+
+export async function sendFriendRequest(identifier: string) {
+  const { error } = await supabase.rpc('send_friend_request', { search_term: identifier.trim() });
+  fail(error);
+}
+
+export async function respondFriendRequest(requestId: string, accept: boolean) {
+  const { error } = await supabase.rpc('respond_friend_request', { request_id: requestId, accept_request: accept });
+  fail(error);
+}
+
+export async function removeFriendship(friendshipId: string) {
+  const { error } = await supabase.rpc('remove_friendship', { friendship_id: friendshipId });
+  fail(error);
 }
 
 export async function createClub(name: string, monthly: boolean) {

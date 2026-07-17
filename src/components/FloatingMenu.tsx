@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Keyboard, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { colors } from '@/lib/theme';
 
-export type MenuTab = 'clubs' | 'activity' | 'account';
+export type MenuTab = 'clubs' | 'activity' | 'friends' | 'account';
 
 const tabs: Array<{ id: MenuTab; label: string; mark: string }> = [
   { id: 'clubs', label: 'Clubs', mark: '○' },
   { id: 'activity', label: 'Actividad', mark: '◇' },
+  { id: 'friends', label: 'Amigos', mark: '△' },
   { id: 'account', label: 'Cuenta', mark: '□' },
 ];
 
@@ -60,11 +61,11 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 8,
   },
-  item: { flex: 1, borderRadius: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  item: { flex: 1, borderRadius: 17, alignItems: 'center', justifyContent: 'center', gap: 2 },
   itemSelected: { backgroundColor: colors.ink },
   pressed: { opacity: 0.65 },
-  mark: { color: colors.muted, fontSize: 15, fontWeight: '600' },
+  mark: { color: colors.muted, fontSize: 13, lineHeight: 15, fontWeight: '600' },
   markSelected: { color: colors.white },
-  label: { color: colors.muted, fontSize: 12, fontWeight: '600' },
+  label: { color: colors.muted, fontSize: 10, lineHeight: 13, fontWeight: '600' },
   labelSelected: { color: colors.white },
 });

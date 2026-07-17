@@ -12,11 +12,13 @@ import { ActivityScreen } from '@/screens/ActivityScreen';
 import { ChallengeScreen } from '@/screens/ChallengeScreen';
 import { ClubScreen } from '@/screens/ClubScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
+import { FriendsScreen } from '@/screens/FriendsScreen';
 import { NewChallengeScreen } from '@/screens/NewChallengeScreen';
 
 type Route =
   | { name: 'home' }
   | { name: 'activity' }
+  | { name: 'friends' }
   | { name: 'account' }
   | { name: 'club'; clubId: string }
   | { name: 'new-challenge'; clubId: string }
@@ -65,6 +67,8 @@ export default function App() {
     content = <ActivityScreen userId={session.user.id} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} />;
   } else if (route.name === 'account') {
     content = <AccountScreen userId={session.user.id} email={session.user.email ?? ''} />;
+  } else if (route.name === 'friends') {
+    content = <FriendsScreen userId={session.user.id} />;
   } else if (route.name === 'club') {
     content = (
       <ClubScreen
@@ -93,10 +97,11 @@ export default function App() {
     );
   }
 
-  const activeTab: MenuTab = route.name === 'activity' ? 'activity' : route.name === 'account' ? 'account' : 'clubs';
+  const activeTab: MenuTab = route.name === 'activity' ? 'activity' : route.name === 'friends' ? 'friends' : route.name === 'account' ? 'account' : 'clubs';
   function selectTab(tab: MenuTab) {
     if (tab === 'clubs') setRoute({ name: 'home' });
     else if (tab === 'activity') setRoute({ name: 'activity' });
+    else if (tab === 'friends') setRoute({ name: 'friends' });
     else setRoute({ name: 'account' });
   }
 

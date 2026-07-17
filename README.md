@@ -6,6 +6,7 @@ MVP móvil de retos fotográficos para clubs de amigos. Está construido con Exp
 
 - Registro e inicio de sesión con email y contraseña.
 - Creación de clubs, código de invitación y temporadas manuales o mensuales.
+- Amigos mediante `@username` o código público, con solicitudes privadas.
 - Reto de color compartido con presets de 24 h, 48 h y una semana.
 - Collage editable de seis fotos hasta el envío definitivo.
 - Espera en tiempo real, descalificación al vencer el plazo y votación única.
@@ -15,7 +16,7 @@ MVP móvil de retos fotográficos para clubs de amigos. Está construido con Exp
 ## Puesta en marcha
 
 1. Crea un proyecto en [Supabase](https://supabase.com).
-2. Ejecuta `supabase/migrations/202607170001_initial_schema.sql` desde el SQL Editor o enlaza el proyecto con la CLI y usa `supabase db push`.
+2. Ejecuta en orden los archivos de `supabase/migrations/` desde el SQL Editor o enlaza el proyecto con la CLI y usa `supabase db push`.
 3. Activa Realtime para las tablas `challenges` y `challenge_participants` si la publicación no se creó durante la migración.
 4. Activa `pg_cron` y programa las dos consultas indicadas al final de la migración para transiciones automáticas.
 5. Crea `.env` a partir de `.env.example` con la URL y la clave anon del proyecto.
