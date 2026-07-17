@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Body, Button, Card, ErrorText, Eyebrow, Field, Header, Screen, Title } from '@/components/ui';
 import { createClub, getClubs, joinClub } from '@/lib/api';
-import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Club } from '@/types/domain';
 
@@ -44,7 +43,7 @@ export function HomeScreen({ onOpenClub }: { onOpenClub: (id: string) => void })
 
   return (
     <Screen>
-      <Header title="Color Club" action={<Pressable onPress={() => supabase.auth.signOut()}><Text style={styles.signOut}>Salir</Text></Pressable>} />
+      <Header title="Color Club" />
       <View style={styles.hero}>
         <Eyebrow>Tus grupos</Eyebrow>
         <Title>Clubs</Title>
@@ -112,7 +111,6 @@ export function HomeScreen({ onOpenClub }: { onOpenClub: (id: string) => void })
 }
 
 const styles = StyleSheet.create({
-  signOut: { color: colors.muted, fontWeight: '700' },
   hero: { marginTop: 26, marginBottom: 30 },
   actions: { gap: 10, marginBottom: 26 },
   loader: { marginTop: 70 },

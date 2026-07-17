@@ -1,6 +1,6 @@
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
-import type { Challenge, Club, DurationPreset, Participant, Photo, RankingRow, Vote } from '@/types/domain';
+import type { ActivityItem, Challenge, Club, DurationPreset, Participant, Photo, RankingRow, Vote } from '@/types/domain';
 
 function fail(error: { message: string } | null) {
   if (error) throw new Error(error.message);
@@ -10,6 +10,31 @@ export async function getClubs(): Promise<Club[]> {
   const { data, error } = await supabase.from('clubs').select('*').order('created_at');
   fail(error);
   return (data ?? []) as Club[];
+}
+
+export async function getActivity(userId: string): Promise<ActivityItem[]> {
+  const participantResult = await supabase
+    .from('challenge_participants')
+    .select('challenge_id,status')
+    .eq('user_id', userId);
+  fail(participantResult.error);
+  const participation = participantResult.data ?? [];
+  if (!participation.length) return [];
+  const challengeResult = await supabase
+    .from('challenges')
+    .select('*, clubs!challenges_club_id_fkey(name)')
+    .in('id', participation.map((item) => item.challenge_id))
+    .order('created_at', { ascending: false });
+  fail(challengeResult.error);
+  return (challengeResult.data ?? []).map((item) => {
+    const club = item.clubs as unknown as { name: string };
+    const ownParticipation = participation.find((entry) => entry.challenge_id === item.id)!;
+    return {
+      ...item,
+      club_name: club.name,
+      participant_status: ownParticipation.status,
+    } as ActivityItem;
+  });
 }
 
 export async function createClub(name: string, monthly: boolean) {

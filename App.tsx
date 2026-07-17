@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { StatusBar } from 'expo-status-bar';
+import { FloatingMenu, type MenuTab } from '@/components/FloatingMenu';
 import { Body, Card, Screen, Title } from '@/components/ui';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import { AuthScreen } from '@/screens/AuthScreen';
+import { AccountScreen } from '@/screens/AccountScreen';
+import { ActivityScreen } from '@/screens/ActivityScreen';
 import { ChallengeScreen } from '@/screens/ChallengeScreen';
 import { ClubScreen } from '@/screens/ClubScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
@@ -13,6 +16,8 @@ import { NewChallengeScreen } from '@/screens/NewChallengeScreen';
 
 type Route =
   | { name: 'home' }
+  | { name: 'activity' }
+  | { name: 'account' }
   | { name: 'club'; clubId: string }
   | { name: 'new-challenge'; clubId: string }
   | { name: 'challenge'; clubId: string; challengeId: string };
@@ -56,6 +61,10 @@ export default function App() {
   let content;
   if (route.name === 'home') {
     content = <HomeScreen onOpenClub={(clubId) => setRoute({ name: 'club', clubId })} />;
+  } else if (route.name === 'activity') {
+    content = <ActivityScreen userId={session.user.id} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} />;
+  } else if (route.name === 'account') {
+    content = <AccountScreen userId={session.user.id} email={session.user.email ?? ''} />;
   } else if (route.name === 'club') {
     content = (
       <ClubScreen
@@ -84,11 +93,25 @@ export default function App() {
     );
   }
 
-  return <><StatusBar style="dark" />{content}</>;
+  const activeTab: MenuTab = route.name === 'activity' ? 'activity' : route.name === 'account' ? 'account' : 'clubs';
+  function selectTab(tab: MenuTab) {
+    if (tab === 'clubs') setRoute({ name: 'home' });
+    else if (tab === 'activity') setRoute({ name: 'activity' });
+    else setRoute({ name: 'account' });
+  }
+
+  return (
+    <View style={styles.app}>
+      <StatusBar style="dark" />
+      {content}
+      <FloatingMenu active={activeTab} onSelect={selectTab} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper },
+  app: { flex: 1, backgroundColor: colors.paper },
   setup: { flex: 1, justifyContent: 'center', gap: 25 },
   mark: { flexDirection: 'row', gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },

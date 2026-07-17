@@ -106,7 +106,7 @@ export function ErrorText({ message }: { message: string | null }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.paper },
-  screen: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 40 },
+  screen: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 118 },
   eyebrow: { color: colors.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.2, marginBottom: 8 },
   title: { color: colors.ink, fontSize: 38, lineHeight: 42, fontWeight: '700', letterSpacing: -1.2 },
   titleMedium: { fontSize: 26, lineHeight: 31, letterSpacing: -0.5 },

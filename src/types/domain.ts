@@ -61,3 +61,8 @@ export interface Vote {
   voter_id: string;
   voted_participant_id: string;
 }
+
+export interface ActivityItem extends Challenge {
+  club_name: string;
+  participant_status: Participant['status'];
+}
