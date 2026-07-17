@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Color Club",
+    "slug": "color-club",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "colorclub",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tandem.colorclub"
+    },
+    "android": {
+      "package": "com.tandem.colorclub"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Color Club necesita acceso a tus fotos para crear el collage.",
+          "cameraPermission": "Color Club necesita la cámara para fotografiar tu color."
+        }
+      ],
+      "expo-status-bar"
+    ]
+  }
+}
