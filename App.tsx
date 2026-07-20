@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 import { StatusBar } from 'expo-status-bar';
 import { FloatingMenu, type MenuTab } from '@/components/FloatingMenu';
@@ -11,6 +11,7 @@ import { AccountScreen } from '@/screens/AccountScreen';
 import { ActivityScreen } from '@/screens/ActivityScreen';
 import { ChallengeScreen } from '@/screens/ChallengeScreen';
 import { ClubScreen } from '@/screens/ClubScreen';
+import { ClubManageScreen } from '@/screens/ClubManageScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { FriendsScreen } from '@/screens/FriendsScreen';
 import { NewChallengeScreen } from '@/screens/NewChallengeScreen';
@@ -21,6 +22,7 @@ type Route =
   | { name: 'friends' }
   | { name: 'account' }
   | { name: 'club'; clubId: string }
+  | { name: 'club-manage'; clubId: string }
   | { name: 'new-challenge'; clubId: string }
   | { name: 'challenge'; clubId: string; challengeId: string };
 
@@ -39,6 +41,22 @@ function SetupScreen() {
       </View>
     </Screen>
   );
+}
+
+function RouteTransition({ routeKey, children }: PropsWithChildren<{ routeKey: string }>) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    opacity.setValue(0);
+    translateY.setValue(10);
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 210, useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, damping: 22, mass: 0.7, stiffness: 180, useNativeDriver: true }),
+    ]).start();
+  }, [opacity, routeKey, translateY]);
+
+  return <Animated.View style={[styles.route, { opacity, transform: [{ translateY }] }]}>{children}</Animated.View>;
 }
 
 export default function App() {
@@ -62,7 +80,7 @@ export default function App() {
 
   let content;
   if (route.name === 'home') {
-    content = <HomeScreen onOpenClub={(clubId) => setRoute({ name: 'club', clubId })} />;
+    content = <HomeScreen userId={session.user.id} onOpenClub={(clubId) => setRoute({ name: 'club', clubId })} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} />;
   } else if (route.name === 'activity') {
     content = <ActivityScreen userId={session.user.id} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} />;
   } else if (route.name === 'account') {
@@ -77,8 +95,11 @@ export default function App() {
         onBack={() => setRoute({ name: 'home' })}
         onChallenge={(challengeId) => setRoute({ name: 'challenge', clubId: route.clubId, challengeId })}
         onNewChallenge={() => setRoute({ name: 'new-challenge', clubId: route.clubId })}
+        onManage={() => setRoute({ name: 'club-manage', clubId: route.clubId })}
       />
     );
+  } else if (route.name === 'club-manage') {
+    content = <ClubManageScreen clubId={route.clubId} userId={session.user.id} onBack={() => setRoute({ name: 'club', clubId: route.clubId })} onDeleted={() => setRoute({ name: 'home' })} />;
   } else if (route.name === 'new-challenge') {
     content = (
       <NewChallengeScreen
@@ -98,6 +119,7 @@ export default function App() {
   }
 
   const activeTab: MenuTab = route.name === 'activity' ? 'activity' : route.name === 'friends' ? 'friends' : route.name === 'account' ? 'account' : 'clubs';
+  const routeKey = route.name === 'club' || route.name === 'club-manage' || route.name === 'new-challenge' ? `${route.name}-${route.clubId}` : route.name === 'challenge' ? `${route.name}-${route.challengeId}` : route.name;
   function selectTab(tab: MenuTab) {
     if (tab === 'clubs') setRoute({ name: 'home' });
     else if (tab === 'activity') setRoute({ name: 'activity' });
@@ -108,7 +130,7 @@ export default function App() {
   return (
     <View style={styles.app}>
       <StatusBar style="dark" />
-      {content}
+      <RouteTransition routeKey={routeKey}>{content}</RouteTransition>
       <FloatingMenu active={activeTab} onSelect={selectTab} />
     </View>
   );
@@ -117,6 +139,7 @@ export default function App() {
 const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper },
   app: { flex: 1, backgroundColor: colors.paper },
+  route: { flex: 1 },
   setup: { flex: 1, justifyContent: 'center', gap: 25 },
   mark: { flexDirection: 'row', gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },

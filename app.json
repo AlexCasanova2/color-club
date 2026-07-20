@@ -20,7 +20,8 @@
           "photosPermission": "Color Club necesita acceso a tus fotos para crear el collage.",
           "cameraPermission": "Color Club necesita la cámara para fotografiar tu color."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }

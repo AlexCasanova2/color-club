@@ -32,15 +32,18 @@ export function AuthScreen() {
   return (
     <Screen>
       <View style={styles.wrap}>
-        <View style={styles.mark}>
-          <View style={[styles.dot, { backgroundColor: colors.coral }]} />
-          <View style={[styles.dot, { backgroundColor: colors.yellow }]} />
-          <View style={[styles.dot, { backgroundColor: colors.cobalt }]} />
-        </View>
-        <View>
-          <Eyebrow>Un color, seis fotos</Eyebrow>
-          <Title>Color Club</Title>
-          <Body muted>Un juego fotográfico para mirar con más atención junto a tus amigos.</Body>
+        <View style={styles.brandPanel}>
+          <View style={styles.mark}>
+            <View style={[styles.dot, { backgroundColor: colors.orange }]} />
+            <View style={[styles.dot, { backgroundColor: colors.yellow }]} />
+            <View style={[styles.dot, { backgroundColor: colors.ink }]} />
+          </View>
+          <View style={styles.brandCopy}>
+            <Eyebrow>Un color, seis fotos</Eyebrow>
+            <Title>Color Club</Title>
+            <Body>Un juego fotográfico para mirar con más atención junto a tus amigos.</Body>
+          </View>
+          <View style={styles.brandRing} />
         </View>
         <View style={styles.form}>
           {isSignUp && <Field label="Tu nombre" value={name} onChangeText={setName} autoCapitalize="words" />}
@@ -61,9 +64,12 @@ export function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, justifyContent: 'center', gap: 38, paddingVertical: 30 },
+  wrap: { flex: 1, justifyContent: 'center', gap: 24, paddingVertical: 24 },
+  brandPanel: { minHeight: 258, padding: 24, borderRadius: 30, backgroundColor: colors.lavender, overflow: 'hidden', justifyContent: 'space-between' },
+  brandCopy: { zIndex: 2, maxWidth: '78%', gap: 4 },
   mark: { flexDirection: 'row', gap: 5 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
+  dot: { width: 12, height: 12, borderRadius: 6 },
+  brandRing: { position: 'absolute', right: -24, bottom: -18, width: 134, height: 134, borderRadius: 67, borderWidth: 30, borderColor: colors.yellow, transform: [{ rotate: '-18deg' }] },
   form: { gap: 16 },
   message: { color: colors.green, lineHeight: 20 },
 });

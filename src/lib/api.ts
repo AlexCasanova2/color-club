@@ -1,6 +1,6 @@
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
-import type { ActivityItem, Challenge, Club, DurationPreset, Friendship, Participant, Photo, RankingRow, Vote } from '@/types/domain';
+import type { ActivityItem, Challenge, Club, ClubMember, DurationPreset, Friendship, Participant, Photo, Profile, RankingRow, Vote } from '@/types/domain';
 
 function fail(error: { message: string } | null) {
   if (error) throw new Error(error.message);
@@ -10,6 +10,54 @@ export async function getClubs(): Promise<Club[]> {
   const { data, error } = await supabase.from('clubs').select('*').order('created_at');
   fail(error);
   return (data ?? []) as Club[];
+}
+
+export async function getHomeDashboard(userId: string): Promise<{ clubs: Club[]; profile: Profile; challenge: (Challenge & { club_name: string; is_accessible: boolean }) | null }> {
+  const [clubs, profileResult] = await Promise.all([
+    getClubs(),
+    supabase.from('profiles').select('*').eq('id', userId).single(),
+  ]);
+  fail(profileResult.error);
+  if (!clubs.length) return { clubs, profile: profileResult.data as Profile, challenge: null };
+  const challengeResult = await supabase
+    .from('challenges')
+    .select('*')
+    .in('club_id', clubs.map((club) => club.id))
+    .in('status', ['configuring', 'active', 'voting'])
+    .order('created_at', { ascending: false })
+    .limit(20);
+  fail(challengeResult.error);
+  const challenges = (challengeResult.data ?? []) as Challenge[];
+  if (!challenges.length) return { clubs, profile: profileResult.data as Profile, challenge: null };
+  const [participantResult, membershipResult] = await Promise.all([
+    supabase
+      .from('challenge_participants')
+      .select('challenge_id')
+      .in('challenge_id', challenges.map((item) => item.id))
+      .eq('user_id', userId),
+    supabase
+      .from('club_members')
+      .select('club_id,joined_at')
+      .in('club_id', clubs.map((club) => club.id))
+      .eq('user_id', userId)
+      .eq('status', 'active'),
+  ]);
+  fail(participantResult.error);
+  fail(membershipResult.error);
+  const challengeAccess = challenges.map((item) => {
+    const membership = (membershipResult.data ?? []).find((entry) => entry.club_id === item.club_id);
+    const joinedBeforeChallenge = membership?.joined_at ? new Date(membership.joined_at).getTime() <= new Date(item.created_at).getTime() : false;
+    return {
+      challenge: item,
+      isAccessible: Boolean((participantResult.data ?? []).some((entry) => entry.challenge_id === item.id)) && joinedBeforeChallenge,
+    };
+  });
+  const selected = challengeAccess.find((item) => item.isAccessible) ?? challengeAccess[0]!;
+  return {
+    clubs,
+    profile: profileResult.data as Profile,
+    challenge: { ...selected.challenge, club_name: clubs.find((club) => club.id === selected.challenge.club_id)?.name ?? 'Tu club', is_accessible: selected.isAccessible },
+  };
 }
 
 export async function getActivity(userId: string): Promise<ActivityItem[]> {
@@ -77,7 +125,15 @@ export async function joinClub(code: string) {
   return data as string;
 }
 
-export async function getClub(clubId: string): Promise<{ club: Club; challenge: Challenge | null; seasonId: string; ranking: RankingRow[] }> {
+export async function inviteUserToClub(clubId: string, identifier: string) {
+  const { error } = await supabase.rpc('invite_user_to_club', {
+    target_club_id: clubId,
+    search_term: identifier.trim(),
+  });
+  fail(error);
+}
+
+export async function getClub(clubId: string, userId?: string): Promise<{ club: Club; challenge: Challenge | null; seasonId: string; ranking: RankingRow[]; myChallengeColor: string | null; isChallengeParticipant: boolean }> {
   const [clubResult, challengeResult, seasonResult] = await Promise.all([
     supabase.from('clubs').select('*').eq('id', clubId).single(),
     supabase.from('challenges').select('*').eq('club_id', clubId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
@@ -89,21 +145,93 @@ export async function getClub(clubId: string): Promise<{ club: Club; challenge: 
   const seasonId = seasonResult.data!.id as string;
   const rankingResult = await supabase.from('season_ranking').select('*').eq('season_id', seasonId).order('position');
   fail(rankingResult.error);
+  let myChallengeColor: string | null = null;
+  let isChallengeParticipant = false;
+  const challenge = challengeResult.data as Challenge | null;
+  if (challenge && userId) {
+    const [participantResult, membershipResult] = await Promise.all([
+      supabase
+        .from('challenge_participants')
+        .select('assigned_color')
+        .eq('challenge_id', challenge.id)
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase
+        .from('club_members')
+        .select('joined_at')
+        .eq('club_id', clubId)
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .maybeSingle(),
+    ]);
+    fail(participantResult.error);
+    fail(membershipResult.error);
+    const joinedBeforeChallenge = membershipResult.data?.joined_at ? new Date(membershipResult.data.joined_at).getTime() <= new Date(challenge.created_at).getTime() : false;
+    isChallengeParticipant = Boolean(participantResult.data) && joinedBeforeChallenge;
+    myChallengeColor = isChallengeParticipant ? participantResult.data?.assigned_color ?? null : null;
+  }
   return {
     club: clubResult.data as Club,
-    challenge: challengeResult.data as Challenge | null,
+    challenge,
     seasonId,
     ranking: (rankingResult.data ?? []) as RankingRow[],
+    myChallengeColor,
+    isChallengeParticipant,
   };
 }
 
-export async function createChallenge(clubId: string, color: string, preset: DurationPreset) {
-  const { data, error } = await supabase.rpc('create_shared_challenge', {
-    target_club_id: clubId,
-    color,
-    preset,
-    begins_at: new Date().toISOString(),
-  });
+export async function getClubMembers(clubId: string): Promise<ClubMember[]> {
+  const { data, error } = await supabase
+    .from('club_members')
+    .select('*, profiles!club_members_user_id_fkey(*)')
+    .eq('club_id', clubId)
+    .eq('status', 'active')
+    .order('joined_at');
+  fail(error);
+  return (data ?? []) as unknown as ClubMember[];
+}
+
+export async function updateClubName(clubId: string, name: string) {
+  const { error } = await supabase.rpc('update_club_name', { target_club_id: clubId, new_name: name.trim() });
+  fail(error);
+}
+
+export async function setClubMemberRole(membershipId: string, role: 'member' | 'admin') {
+  const { error } = await supabase.rpc('set_club_member_role', { target_membership_id: membershipId, new_role: role });
+  fail(error);
+}
+
+export async function removeClubMember(membershipId: string) {
+  const { error } = await supabase.rpc('remove_club_member', { target_membership_id: membershipId });
+  fail(error);
+}
+
+export async function deleteCurrentChallenge(clubId: string) {
+  const { error } = await supabase.rpc('delete_current_challenge', { target_club_id: clubId });
+  fail(error);
+}
+
+export async function deleteClub(clubId: string, confirmation: string) {
+  const { error } = await supabase.rpc('delete_club', { target_club_id: clubId, confirmation });
+  fail(error);
+}
+
+export async function createChallenge(clubId: string, mode: 'shared_color' | 'individual_random', color: string, preset: DurationPreset, photoCount: number, colorSelectionMode: 'manual' | 'shared_random' | 'individual_random' = 'manual') {
+  const { data, error } = mode === 'shared_color'
+    ? await supabase.rpc('create_shared_challenge', {
+      target_club_id: clubId,
+      color,
+      preset,
+      begins_at: new Date().toISOString(),
+      target_photo_count: photoCount,
+      target_color_selection_mode: colorSelectionMode,
+    })
+    : await supabase.rpc('create_random_challenge', {
+      target_club_id: clubId,
+      preset,
+      begins_at: new Date().toISOString(),
+      target_photo_count: photoCount,
+    });
   fail(error);
   return data as string;
 }
@@ -117,6 +245,18 @@ export async function getChallenge(challengeId: string, userId: string) {
   fail(challengeResult.error);
   fail(participantsResult.error);
   fail(votesResult.error);
+  const challenge = challengeResult.data as Challenge;
+  const membershipResult = await supabase
+    .from('club_members')
+    .select('joined_at')
+    .eq('club_id', challenge.club_id)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle();
+  fail(membershipResult.error);
+  if (challenge.status !== 'closed' && (!membershipResult.data?.joined_at || new Date(membershipResult.data.joined_at).getTime() > new Date(challenge.created_at).getTime())) {
+    throw new Error('Este reto ya estaba en curso cuando entraste al grupo. Podrás participar en el siguiente.');
+  }
   const participants = (participantsResult.data ?? []) as unknown as Participant[];
   const ids = participants.map((participant) => participant.id);
   let photos: Photo[] = [];
@@ -127,10 +267,10 @@ export async function getChallenge(challengeId: string, userId: string) {
   }
   const signed = await Promise.all(photos.map(async (photo) => {
     const { data } = await supabase.storage.from('collages').createSignedUrl(photo.photo_url, 3600);
-    return { ...photo, photo_url: data?.signedUrl ?? '' };
+    return { ...photo, storage_path: photo.photo_url, photo_url: data?.signedUrl ?? '' };
   }));
   return {
-    challenge: challengeResult.data as Challenge,
+    challenge,
     participants: participants.map((participant) => ({
       ...participant,
       photos: signed.filter((photo) => photo.participant_id === participant.id),
@@ -149,21 +289,31 @@ export async function uploadPhoto(participantId: string, slot: number, uri: stri
     reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
     reader.readAsDataURL(blob);
   });
-  const path = `${participantId}/${slot}.jpg`;
+  const path = `${participantId}/${slot}-${Date.now()}.jpg`;
   const upload = await supabase.storage.from('collages').upload(path, decode(base64), {
     contentType: 'image/jpeg',
     upsert: true,
   });
   fail(upload.error);
-  const result = await supabase.from('photos').upsert(
-    { participant_id: participantId, slot_order: slot, photo_url: path },
-    { onConflict: 'participant_id,slot_order' },
-  );
+  const result = await supabase.rpc('save_participant_photo', {
+    target_participant_id: participantId,
+    target_slot: slot,
+    target_photo_url: path,
+  });
   fail(result.error);
 }
 
 export async function submitCollage(participantId: string) {
   const { error } = await supabase.rpc('submit_collage', { target_participant_id: participantId });
+  fail(error);
+}
+
+export async function deletePhoto(photoId: string, storagePath?: string) {
+  if (storagePath) {
+    const storage = await supabase.storage.from('collages').remove([storagePath]);
+    fail(storage.error);
+  }
+  const { error } = await supabase.from('photos').delete().eq('id', photoId);
   fail(error);
 }
 

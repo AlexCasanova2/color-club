@@ -1,6 +1,7 @@
-import type { PropsWithChildren, ReactNode } from 'react';
+import { useEffect, useRef, type PropsWithChildren, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Platform,
   Pressable,
   SafeAreaView,
@@ -12,22 +13,26 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/lib/theme';
 
 export function Screen({ children, scroll = true }: PropsWithChildren<{ scroll?: boolean }>) {
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={styles.safe}>
+      <SafeAreaView style={styles.topSafe} />
       {scroll ? (
         <ScrollView
           automaticallyAdjustKeyboardInsets
           contentContainerStyle={styles.screen}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
         >
           {children}
         </ScrollView>
       ) : <View style={styles.screen}>{children}</View>}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -93,9 +98,19 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
 export function Header({ title, onBack, action }: { title: string; onBack?: () => void; action?: ReactNode }) {
   return (
     <View style={styles.header}>
-      <View style={styles.headerSide}>{onBack && <Pressable onPress={onBack}><Text style={styles.headerAction}>← Volver</Text></Pressable>}</View>
-      <Text numberOfLines={1} style={styles.headerTitle}>{title}</Text>
-      <View style={[styles.headerSide, styles.headerRight]}>{action}</View>
+      <View style={styles.island}>
+        <View style={styles.headerSide}>
+          {onBack ? (
+            <Pressable accessibilityLabel="Volver" accessibilityRole="button" onPress={onBack} style={({ pressed }) => [styles.backButton, pressed && styles.headerPressed]}>
+              <Ionicons color={colors.white} name="chevron-back" size={21} />
+            </Pressable>
+          ) : (
+            <View style={styles.islandMark}><View style={[styles.islandDot, { backgroundColor: colors.orange }]} /><View style={[styles.islandDot, { backgroundColor: colors.lavender }]} /></View>
+          )}
+        </View>
+        <Text numberOfLines={1} style={styles.headerTitle}>{title}</Text>
+        <View style={[styles.headerSide, styles.headerRight]}>{action ?? <View style={styles.liveDot} />}</View>
+      </View>
     </View>
   );
 }
@@ -104,16 +119,30 @@ export function ErrorText({ message }: { message: string | null }) {
   return message ? <Text style={styles.error}>{message}</Text> : null;
 }
 
+export function SkeletonBlock({ style }: { style?: ViewStyle }) {
+  const opacity = useRef(new Animated.Value(0.45)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(opacity, { toValue: 0.85, duration: 760, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0.45, duration: 760, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return <Animated.View style={[styles.skeleton, style, { opacity }]} />;
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.paper },
-  screen: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: 118 },
-  eyebrow: { color: colors.muted, fontSize: 12, fontWeight: '600', letterSpacing: 0.2, marginBottom: 8 },
-  title: { color: colors.ink, fontSize: 38, lineHeight: 42, fontWeight: '700', letterSpacing: -1.2 },
-  titleMedium: { fontSize: 26, lineHeight: 31, letterSpacing: -0.5 },
+  topSafe: { backgroundColor: colors.paper },
+  screen: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 112 },
+  eyebrow: { color: colors.muted, fontSize: 13, fontWeight: '500', marginBottom: 7 },
+  title: { color: colors.ink, fontSize: 40, lineHeight: 43, fontWeight: '800', letterSpacing: -1.5 },
+  titleMedium: { fontSize: 27, lineHeight: 31, letterSpacing: -0.8 },
   body: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   muted: { color: colors.muted },
-  card: { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1, borderRadius: 16, padding: 20 },
-  button: { minHeight: 52, borderRadius: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.ink },
+  card: { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1, borderRadius: 24, padding: 20 },
+  button: { minHeight: 54, borderRadius: 18, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.ink },
   primaryButton: { backgroundColor: colors.ink },
   secondaryButton: { backgroundColor: colors.surface },
   quietButton: { borderColor: 'transparent', minHeight: 44 },
@@ -125,11 +154,17 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.75, transform: [{ translateY: 1 }] },
   fieldWrap: { gap: 7 },
   label: { color: colors.muted, fontSize: 13, fontWeight: '600' },
-  input: { minHeight: 54, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 14, paddingHorizontal: 16, color: colors.ink, fontSize: 16 },
-  header: { minHeight: 64, marginHorizontal: -2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerSide: { width: 82 },
+  input: { minHeight: 54, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 18, paddingHorizontal: 16, color: colors.ink, fontSize: 16 },
+  header: { minHeight: 74, justifyContent: 'center', paddingTop: 6 },
+  island: { minHeight: 54, paddingHorizontal: 8, borderRadius: 28, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.16, shadowRadius: 14, elevation: 7 },
+  headerSide: { width: 46, justifyContent: 'center' },
   headerRight: { alignItems: 'flex-end' },
-  headerAction: { color: colors.ink, fontWeight: '600', fontSize: 14 },
-  headerTitle: { flex: 1, textAlign: 'center', color: colors.ink, fontWeight: '600', fontSize: 14 },
+  backButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#292A31', alignItems: 'center', justifyContent: 'center' },
+  headerPressed: { opacity: 0.55 },
+  islandMark: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#292A31', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
+  islandDot: { width: 7, height: 7, borderRadius: 4 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green, marginRight: 12 },
+  headerTitle: { flex: 1, textAlign: 'center', color: colors.white, fontWeight: '700', fontSize: 14, letterSpacing: 0.1 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
+  skeleton: { backgroundColor: '#E3E1DA', borderRadius: 22 },
 });
