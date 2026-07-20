@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Body, Button, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
+import * as Haptics from 'expo-haptics';
+import { Body, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
 import { createChallenge } from '@/lib/api';
 import { colorChoices, colors } from '@/lib/theme';
 import type { DurationPreset } from '@/types/domain';
@@ -25,6 +26,17 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
   const [photoCount, setPhotoCount] = useState(6);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const holdProgress = useRef(new Animated.Value(0)).current;
+  const holdCompleted = useRef(false);
+  const hapticInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const randomLaunchColor = useRef(colorChoices[Math.floor(Math.random() * colorChoices.length)]!.hex).current;
+  const launchProgressColor = color.includes('random') ? randomLaunchColor : color;
+
+  function stopHaptics() {
+    if (!hapticInterval.current) return;
+    clearInterval(hapticInterval.current);
+    hapticInterval.current = null;
+  }
 
   async function launch() {
     setLoading(true);
@@ -34,6 +46,40 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
     const colorSelectionMode = color === sharedRandomChoice.hex ? 'shared_random' : color === individualRandomChoice.hex ? 'individual_random' : 'manual';
     try { onCreated(await createChallenge(clubId, mode, sharedColor, duration, photoCount, colorSelectionMode)); }
     catch (caught) { setError((caught as Error).message); setLoading(false); }
+  }
+
+  function beginHold() {
+    if (loading) return;
+    holdCompleted.current = false;
+    holdProgress.setValue(0);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    stopHaptics();
+    hapticInterval.current = setInterval(() => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }, 210);
+    Animated.timing(holdProgress, {
+      toValue: 1,
+      duration: 1200,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      stopHaptics();
+      if (!finished || loading) return;
+      holdCompleted.current = true;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void launch();
+    });
+  }
+
+  function endHold() {
+    stopHaptics();
+    if (holdCompleted.current || loading) return;
+    holdProgress.stopAnimation(() => {
+      Animated.timing(holdProgress, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: false,
+      }).start();
+    });
   }
 
   return (
@@ -61,12 +107,19 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
           </Pressable>
         ))}
       </View>
-      <View style={styles.summary}>
-        <View style={[styles.summaryColor, { backgroundColor: color.includes('random') ? colors.ink : color }]} />
-        <Body>{color === individualRandomChoice.hex ? 'Color único por persona' : color === sharedRandomChoice.hex ? 'Mismo color aleatorio' : 'Color compartido'} · {durations.find((item) => item.value === duration)?.label} · {photoCount} fotos</Body>
+      <View style={styles.launchPanel}>
+        <View style={styles.launchSummary}>
+          <View style={styles.launchChip}><View style={[styles.launchDot, { backgroundColor: color.includes('random') ? colors.ink : color }]} /><Text style={styles.launchChipText}>{color === individualRandomChoice.hex ? 'Único' : color === sharedRandomChoice.hex ? 'Aleatorio' : 'Compartido'}</Text></View>
+          <View style={styles.launchChip}><Ionicons color={colors.ink} name="images-outline" size={15} /><Text style={styles.launchChipText}>{photoCount} fotos</Text></View>
+          <View style={styles.launchChip}><Ionicons color={colors.ink} name="timer-outline" size={15} /><Text style={styles.launchChipText}>{durations.find((item) => item.value === duration)?.label}</Text></View>
+        </View>
+        <Pressable disabled={loading} onPressIn={beginHold} onPressOut={endHold} style={({ pressed }) => [styles.launchButton, pressed && styles.launchPressed, loading && styles.launchLoading]}>
+          <Animated.View pointerEvents="none" style={[styles.launchProgress, { backgroundColor: launchProgressColor, width: holdProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+          <View><Text style={styles.launchButtonKicker}>{loading ? 'Confirmado' : 'Mantén pulsado'}</Text><Text style={styles.launchButtonText}>{loading ? 'Lanzando reto...' : 'Lanzar reto'}</Text></View>
+          <View style={styles.launchArrow}>{loading ? <Text style={styles.launchArrowText}>...</Text> : <Ionicons color={colors.ink} name="arrow-forward" size={20} />}</View>
+        </Pressable>
       </View>
       <ErrorText message={error} />
-      <Button label="Lanzar reto al club" onPress={launch} loading={loading} />
     </Screen>
   );
 }
@@ -93,6 +146,17 @@ const styles = StyleSheet.create({
   durationSelected: { borderColor: colors.ink, backgroundColor: colors.ink },
   durationText: { color: colors.ink, fontWeight: '600', fontSize: 13 },
   durationTextSelected: { color: colors.white },
-  summary: { marginVertical: 28, minHeight: 92, backgroundColor: colors.orange, borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  summaryColor: { width: 42, height: 42, borderRadius: 15, borderWidth: 4, borderColor: '#FFFFFF88' },
+  launchPanel: { marginTop: 30, marginBottom: 12, gap: 12 },
+  launchSummary: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  launchChip: { minHeight: 38, paddingHorizontal: 12, borderRadius: 19, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  launchDot: { width: 15, height: 15, borderRadius: 6, borderWidth: 2, borderColor: '#FFFFFFAA' },
+  launchChipText: { color: colors.ink, fontSize: 12, fontWeight: '800' },
+  launchButton: { minHeight: 82, borderRadius: 28, backgroundColor: colors.ink, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', overflow: 'hidden' },
+  launchProgress: { position: 'absolute', left: 0, top: 0, bottom: 0 },
+  launchPressed: { transform: [{ translateY: 1 }] },
+  launchLoading: { opacity: 0.72 },
+  launchButtonKicker: { color: colors.white, opacity: 0.58, fontSize: 12, fontWeight: '800', marginBottom: 3 },
+  launchButtonText: { color: colors.white, fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+  launchArrow: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
+  launchArrowText: { color: colors.ink, fontSize: 15, fontWeight: '900' },
 });
