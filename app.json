@@ -1,17 +1,43 @@
 {
   "expo": {
     "name": "Color Club",
+    "owner": "annuan",
     "slug": "color-club",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "description": "Retos fotográficos por color para clubs de amigos.",
     "userInterfaceStyle": "light",
     "scheme": "colorclub",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF6E8"
+    },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.tandem.colorclub"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.colorclub.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Color Club necesita la cámara para fotografiar tu color.",
+        "NSPhotoLibraryUsageDescription": "Color Club necesita acceso a tus fotos para crear el collage.",
+        "NSPhotoLibraryAddUsageDescription": "Color Club necesita guardar imágenes si decides exportarlas."
+      }
     },
     "android": {
-      "package": "com.tandem.colorclub"
+      "package": "com.colorclub.app",
+      "versionCode": 1,
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#FFF6E8"
+      }
     },
     "plugins": [
       [
@@ -22,6 +48,11 @@
         }
       ],
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "1ee831d3-4637-404d-8763-523498a66501"
+      }
+    }
   }
 }
