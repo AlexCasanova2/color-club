@@ -4,9 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { ToastBubble, ToastOverlay } from '@/components/Toast';
 import { Body, Button, Card, ErrorText, Field, Header, Screen, Title } from '@/components/ui';
-import { getClub, getClubMembers, getFriendships, inviteUserToClub } from '@/lib/api';
+import { getClub, getClubMembers, getFriendships, getMyClubMembership, inviteUserToClub } from '@/lib/api';
 import { colors } from '@/lib/theme';
-import type { Challenge, Club, Friendship, Profile, RankingRow } from '@/types/domain';
+import type { Challenge, Club, ClubMember, Friendship, Profile, RankingRow } from '@/types/domain';
 
 function countdown(date: string) {
   const milliseconds = Math.max(0, new Date(date).getTime() - Date.now());
@@ -32,6 +32,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   const [isChallengeParticipant, setIsChallengeParticipant] = useState(false);
   const [ranking, setRanking] = useState<RankingRow[]>([]);
   const [friends, setFriends] = useState<Profile[]>([]);
+  const [membership, setMembership] = useState<ClubMember | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(true);
@@ -47,8 +48,9 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
 
   async function load() {
     try {
-      const data = await getClub(clubId, userId);
+      const [data, memberData] = await Promise.all([getClub(clubId, userId), getMyClubMembership(clubId, userId)]);
       setClub(data.club);
+      setMembership(memberData);
       setChallenge(data.challenge);
       setRanking(data.ranking);
       setMyChallengeColor(data.myChallengeColor);
@@ -92,6 +94,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
     setIdentifier('');
     setInvitedFriendIds([]);
     setMemberUserIds([]);
+    if (club && !club.invites_enabled) { showToast('Las invitaciones están pausadas.'); return; }
     setInviteOpen(true);
     try {
       const [relationships, members] = await Promise.all([getFriendships(), getClubMembers(clubId)]);
@@ -117,6 +120,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
 
   const challengeColor = challenge?.shared_color ?? myChallengeColor ?? colors.line;
   const canOpenChallenge = !challenge || challenge.status === 'closed' || isChallengeParticipant;
+  const canCreateChallenge = club.admin_id === userId || membership?.role === 'admin' || club.challenge_creation_policy === 'all_members' || (club.challenge_creation_policy === 'admins_moderators' && membership?.role === 'moderator');
 
   return (
     <Screen>
@@ -132,13 +136,13 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
       </View>
 
       <View style={styles.actionsRow}>
-        <Pressable onPress={onChat} style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]}>
+        <Pressable disabled={!club.chat_enabled} onPress={onChat} style={({ pressed }) => [styles.actionCard, !club.chat_enabled && styles.disabledAction, pressed && styles.pressed]}>
           <View style={styles.actionIcon}><Ionicons color={colors.ink} name="chatbubbles-outline" size={20} /></View>
-          <View style={styles.actionText}><Text style={styles.actionTitle}>Chat</Text><Text style={styles.actionMeta}>Hablar con el grupo</Text></View>
+          <View style={styles.actionText}><Text style={styles.actionTitle}>Chat</Text><Text style={styles.actionMeta}>{club.chat_enabled ? 'Hablar con el grupo' : 'Desactivado por admin'}</Text></View>
         </Pressable>
-        <Pressable onPress={openInvite} style={({ pressed }) => [styles.actionCard, styles.inviteCard, pressed && styles.pressed]}>
+        <Pressable disabled={!club.invites_enabled} onPress={openInvite} style={({ pressed }) => [styles.actionCard, styles.inviteCard, !club.invites_enabled && styles.disabledAction, pressed && styles.pressed]}>
           <View style={styles.actionIcon}><Ionicons color={colors.ink} name="person-add-outline" size={20} /></View>
-          <View style={styles.actionText}><Text style={styles.actionTitle}>Invitar</Text><Text style={styles.actionMeta}>Amigos o código</Text></View>
+          <View style={styles.actionText}><Text style={styles.actionTitle}>Invitar</Text><Text style={styles.actionMeta}>{club.invites_enabled ? 'Amigos o código' : 'Invitaciones pausadas'}</Text></View>
         </Pressable>
       </View>
 
@@ -165,7 +169,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
           </View>
           <View style={[styles.swatch, { backgroundColor: challengeColor }]} />
         </Pressable>
-      ) : club.admin_id === userId ? (
+      ) : canCreateChallenge ? (
         <Pressable onPress={onNewChallenge} style={({ pressed }) => [styles.emptyChallenge, pressed && styles.pressed]}>
           <Ionicons color={colors.ink} name="sparkles-outline" size={26} />
           <Text style={styles.emptyChallengeTitle}>Lanzar nuevo reto</Text>
@@ -243,6 +247,7 @@ const styles = StyleSheet.create({
   actionsRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
   actionCard: { flex: 1, minHeight: 82, padding: 14, borderRadius: 24, backgroundColor: colors.blue, flexDirection: 'row', alignItems: 'center', gap: 10 },
   inviteCard: { backgroundColor: colors.green },
+  disabledAction: { opacity: 0.48 },
   actionIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: '#FFFFFF88', alignItems: 'center', justifyContent: 'center' },
   actionText: { flex: 1 },
   actionTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },

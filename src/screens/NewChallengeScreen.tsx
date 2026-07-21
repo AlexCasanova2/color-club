@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Body, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
-import { createChallenge } from '@/lib/api';
+import { createChallenge, getClub } from '@/lib/api';
 import { colorChoices, colors } from '@/lib/theme';
 import type { DurationPreset } from '@/types/domain';
 
@@ -31,6 +31,13 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
   const hapticInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const randomLaunchColor = useRef(colorChoices[Math.floor(Math.random() * colorChoices.length)]!.hex).current;
   const launchProgressColor = color.includes('random') ? randomLaunchColor : color;
+
+  useEffect(() => {
+    void getClub(clubId).then(({ club }) => {
+      setDuration(club.default_duration_preset ?? '2h');
+      setPhotoCount(club.default_photo_count ?? 6);
+    }).catch(() => undefined);
+  }, [clubId]);
 
   function stopHaptics() {
     if (!hapticInterval.current) return;

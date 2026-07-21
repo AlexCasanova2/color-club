@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { Body, Button, ErrorText, Eyebrow, Field, Screen, Title } from '@/components/ui';
+import { Ionicons } from '@expo/vector-icons';
+import { Body, Button, ErrorText, Field, Screen, Title } from '@/components/ui';
 import { colors } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
 
@@ -11,6 +12,7 @@ export function AuthScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -77,7 +79,6 @@ export function AuthScreen() {
             <View style={[styles.dot, { backgroundColor: colors.ink }]} />
           </View>
           <View style={[styles.brandCopy, compact && styles.brandCopyCompact]}>
-            {!tiny && <Eyebrow>Un color, seis fotos</Eyebrow>}
             <Title>{isResettingPassword ? 'Recupera acceso' : 'Color Club'}</Title>
             {!tiny && <Body>{isResettingPassword ? 'Te mandaremos un enlace seguro para volver a entrar.' : 'Un juego fotográfico para mirar con más atención junto a tus amigos.'}</Body>}
           </View>
@@ -101,7 +102,11 @@ export function AuthScreen() {
           </View>}
           {isSignUp && !isResettingPassword && <Field label="Tu nombre" value={name} onChangeText={setName} autoCapitalize="words" />}
           <Field label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
-          {!isResettingPassword && <Field label="Contraseña" value={password} onChangeText={setPassword} secureTextEntry />}
+          {!isResettingPassword && <Field label="Contraseña" value={password} onChangeText={setPassword} secureTextEntry={!passwordVisible} rightElement={
+            <Pressable accessibilityLabel={passwordVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'} accessibilityRole="button" onPress={() => setPasswordVisible((visible) => !visible)} style={({ pressed }) => [styles.passwordToggle, pressed && styles.pressed]}>
+              <Ionicons color={colors.ink} name={passwordVisible ? 'eye-off-outline' : 'eye-outline'} size={21} />
+            </Pressable>
+          } />}
           <ErrorText message={error} />
           {message && <Text style={styles.message}>{message}</Text>}
           <Button label={isResettingPassword ? 'Enviar enlace' : isSignUp ? 'Crear mi cuenta' : 'Entrar al club'} onPress={isResettingPassword ? resetPassword : submit} loading={loading} />
@@ -142,5 +147,7 @@ const styles = StyleSheet.create({
   formHeader: { gap: 4, marginBottom: 2 },
   formTitle: { color: colors.ink, fontSize: 24, fontWeight: '900', letterSpacing: -0.6 },
   formSubtitle: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  passwordToggle: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paper },
+  pressed: { opacity: 0.65 },
   message: { color: colors.green, lineHeight: 20, fontWeight: '700' },
 });

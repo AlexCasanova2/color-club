@@ -231,6 +231,13 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
 
   const completed = me.photos?.length ?? 0;
   const submitted = participants.filter((participant) => participant.status === 'submitted').length;
+  const waitingParticipants = [...participants].sort((first, second) => {
+    if (first.user_id === userId) return -1;
+    if (second.user_id === userId) return 1;
+    if (first.status !== second.status) return first.status === 'submitted' ? -1 : 1;
+    return first.profiles.display_name.localeCompare(second.profiles.display_name);
+  });
+  const submissionProgress = participants.length ? `${(submitted / participants.length) * 100}%` as `${number}%` : '0%';
   const photoCount = challenge.photo_count ?? 6;
   const collageRows = Math.ceil(photoCount / 2);
   const revealColor = revealStopped && targetColor ? targetColor : revealColors[wheelIndex] ?? colors.ink;
@@ -385,7 +392,61 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
       <Screen>
         <Header title="Esperando" onBack={onBack} />
         {revealModal}
-        <View style={styles.centerHero}><Eyebrow>Quedan {remaining(challenge.ends_at)}</Eyebrow><Title>Ya está.</Title><Body muted>Tu collage está cerrado. Ahora toca esperar al resto del club.</Body></View>
+        <View style={styles.waitingHero}>
+          <View style={styles.waitingHeroTop}>
+            <View style={styles.waitingDoneIcon}><Ionicons color={colors.ink} name="checkmark" size={22} /></View>
+            <Text style={styles.timeBadge}>{remaining(challenge.ends_at)} restantes</Text>
+          </View>
+          <View style={styles.waitingHeroCopy}>
+            <Text style={styles.waitingKicker}>COLLAGE ENVIADO</Text>
+            <Title size="medium">Ya está en juego</Title>
+            <Body>Tu collage está cerrado. La votación empezará cuando termine el tiempo.</Body>
+          </View>
+        </View>
+
+        <Card style={styles.waitingProgressCard}>
+          <View style={styles.waitingProgressHeader}>
+            <View>
+              <Text style={styles.waitingSectionLabel}>PROGRESO DEL CLUB</Text>
+              <Text style={styles.waitingProgressValue}>{submitted}<Text style={styles.waitingProgressTotal}> / {participants.length}</Text></Text>
+            </View>
+            <Text style={styles.waitingProgressCaption}>{participants.length - submitted === 0 ? 'Todo listo' : `${participants.length - submitted} por enviar`}</Text>
+          </View>
+          <View style={styles.waitingProgressTrack}><View style={[styles.waitingProgressFill, { width: submissionProgress }]} /></View>
+        </Card>
+
+        <Card style={styles.participantsCard}>
+          <View style={styles.participantsHeader}>
+            <Text style={styles.participantsTitle}>Participantes</Text>
+            <Text style={styles.participantsCount}>{participants.length}</Text>
+          </View>
+          <View>
+            {waitingParticipants.map((participant, participantIndex) => {
+              const isSubmitted = participant.status === 'submitted';
+              const displayName = participant.profiles.display_name;
+              return (
+                <View key={participant.id} style={[styles.participantRow, participantIndex === waitingParticipants.length - 1 && styles.participantRowLast]}>
+                  {participant.profiles.avatar_url ? (
+                    <Image source={{ uri: participant.profiles.avatar_url }} style={styles.participantAvatar} />
+                  ) : (
+                    <View style={[styles.participantAvatar, styles.participantAvatarFallback, { backgroundColor: participant.profiles.avatar_color || colors.lavender }]}>
+                      <Text style={styles.participantInitial}>{displayName.trim().charAt(0).toUpperCase()}</Text>
+                    </View>
+                  )}
+                  <View style={styles.participantIdentity}>
+                    <Text numberOfLines={1} style={styles.participantName}>{displayName}</Text>
+                    <Text style={styles.participantMeta}>{participant.user_id === userId ? 'Tú' : isSubmitted ? 'Collage bloqueado' : 'Buscando colores'}</Text>
+                  </View>
+                  <View style={[styles.participantStatus, isSubmitted && styles.participantStatusDone]}>
+                    <View style={[styles.participantStatusDot, isSubmitted && styles.participantStatusDotDone]} />
+                    <Text style={[styles.participantStatusText, isSubmitted && styles.participantStatusTextDone]}>{isSubmitted ? 'Listo' : 'En curso'}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </Card>
+
         {me.status === 'submitted' && (
           <Card style={styles.ownCollageCard}>
             <View style={styles.ownCollageHeader}>
@@ -398,17 +459,6 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
             <Collage participant={me} photoCount={photoCount} />
           </Card>
         )}
-        <Text style={styles.counter}>{submitted}/{participants.length}</Text>
-        <Text style={styles.counterLabel}>collages enviados</Text>
-        <View style={styles.people}>
-          {participants.map((participant) => (
-            <View key={participant.id} style={styles.person}>
-              <View style={[styles.statusDot, participant.status === 'submitted' && styles.statusDone]} />
-              <Text style={styles.personName}>{participant.profiles.display_name}{participant.user_id === userId ? ' (tú)' : ''}</Text>
-              <Text style={styles.personStatus}>{participant.status === 'submitted' ? 'listo' : 'buscando'}</Text>
-            </View>
-          ))}
-        </View>
       </Screen>
     );
   }
@@ -529,20 +579,43 @@ const styles = StyleSheet.create({
   cropImage: { position: 'absolute' },
   cropGuide: { ...StyleSheet.absoluteFillObject, borderWidth: 2, borderColor: '#FFFFFFAA' },
   cropHint: { color: colors.white, opacity: 0.72, textAlign: 'center', fontSize: 13, lineHeight: 18 },
-  centerHero: { minHeight: 190, padding: 24, borderRadius: 30, backgroundColor: colors.lavender, alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 24 },
-  counter: { textAlign: 'center', color: colors.ink, fontSize: 70, fontWeight: '900', letterSpacing: -3, marginTop: 32 },
-  counterLabel: { textAlign: 'center', color: colors.muted, fontSize: 13, fontWeight: '500' },
-  ownCollageCard: { marginTop: 18, backgroundColor: colors.surface, gap: 12 },
+  waitingHero: { minHeight: 220, padding: 22, borderRadius: 30, backgroundColor: colors.lavender, justifyContent: 'space-between', gap: 28, marginTop: 18, marginBottom: 14, overflow: 'hidden' },
+  waitingHeroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  waitingDoneIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
+  timeBadge: { color: colors.ink, fontSize: 12, fontWeight: '800', backgroundColor: '#FFFFFF66', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, overflow: 'hidden' },
+  waitingHeroCopy: { maxWidth: '92%', gap: 7 },
+  waitingKicker: { color: '#11121799', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  waitingProgressCard: { gap: 18 },
+  waitingProgressHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 },
+  waitingSectionLabel: { color: colors.muted, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  waitingProgressValue: { color: colors.ink, fontSize: 44, lineHeight: 48, fontWeight: '900', letterSpacing: -1.8, marginTop: 3 },
+  waitingProgressTotal: { color: colors.muted, fontSize: 22, letterSpacing: -0.8 },
+  waitingProgressCaption: { color: colors.ink, fontSize: 12, fontWeight: '800', backgroundColor: colors.paper, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 15, overflow: 'hidden' },
+  waitingProgressTrack: { height: 10, borderRadius: 5, backgroundColor: colors.line, overflow: 'hidden' },
+  waitingProgressFill: { height: 10, borderRadius: 5, backgroundColor: colors.green },
+  participantsCard: { marginTop: 14, paddingBottom: 4 },
+  participantsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  participantsTitle: { color: colors.ink, fontSize: 19, fontWeight: '900', letterSpacing: -0.3 },
+  participantsCount: { minWidth: 30, height: 30, borderRadius: 15, backgroundColor: colors.paper, color: colors.muted, textAlign: 'center', textAlignVertical: 'center', lineHeight: 30, fontSize: 12, fontWeight: '900', overflow: 'hidden' },
+  participantRow: { minHeight: 70, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
+  participantRowLast: { borderBottomWidth: 0 },
+  participantAvatar: { width: 42, height: 42, borderRadius: 15 },
+  participantAvatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  participantInitial: { color: colors.ink, fontSize: 16, fontWeight: '900' },
+  participantIdentity: { flex: 1, minWidth: 0 },
+  participantName: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  participantMeta: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  participantStatus: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 14, backgroundColor: colors.paper },
+  participantStatusDone: { backgroundColor: '#DDF5E9' },
+  participantStatusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.muted },
+  participantStatusDotDone: { backgroundColor: '#287957' },
+  participantStatusText: { color: colors.muted, fontSize: 10, fontWeight: '800' },
+  participantStatusTextDone: { color: '#287957' },
+  ownCollageCard: { marginTop: 14, backgroundColor: colors.surface, gap: 12 },
   ownCollageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   ownCollageTitle: { color: colors.ink, fontSize: 18, fontWeight: '900' },
   ownCollageMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
   doneBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
-  people: { marginTop: 30, backgroundColor: colors.blue, borderRadius: 26, paddingHorizontal: 18 },
-  person: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.line, gap: 12 },
-  statusDot: { width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: colors.muted },
-  statusDone: { backgroundColor: colors.green, borderColor: colors.green },
-  personName: { flex: 1, color: colors.ink, fontWeight: '600' },
-  personStatus: { color: colors.muted, fontSize: 12 },
   notice: { marginBottom: 16, backgroundColor: colors.yellow, borderWidth: 0 },
   candidates: { gap: 18 },
   candidateHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },

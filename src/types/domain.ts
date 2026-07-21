@@ -24,9 +24,16 @@ export interface Club {
   id: string;
   name: string;
   photo_url: string | null;
+  description: string | null;
+  theme_color: string;
   admin_id: string;
   invite_code: string;
   season_reset_mode: 'manual' | 'monthly_auto';
+  invites_enabled: boolean;
+  challenge_creation_policy: 'admins' | 'admins_moderators' | 'all_members';
+  default_duration_preset: DurationPreset;
+  default_photo_count: number;
+  chat_enabled: boolean;
 }
 
 export interface ClubMember {
@@ -34,7 +41,7 @@ export interface ClubMember {
   club_id: string;
   user_id: string;
   status: 'active' | 'left';
-  role: 'member' | 'admin';
+  role: 'member' | 'moderator' | 'admin';
   joined_at: string;
   profiles: Profile;
 }

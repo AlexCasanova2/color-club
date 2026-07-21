@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState, type PropsWithChildren, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { StatusBar } from 'expo-status-bar';
 import { FloatingMenu, type MenuTab } from '@/components/FloatingMenu';
-import { Body, Card, Screen, Title } from '@/components/ui';
+import { Body, Button, Card, Screen, Title } from '@/components/ui';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { getUnreadNotificationCount, markNotificationRead } from '@/lib/api';
 import { colors } from '@/lib/theme';
 import { AuthScreen } from '@/screens/AuthScreen';
+import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { AccountScreen } from '@/screens/AccountScreen';
 import { EditProfileScreen } from '@/screens/EditProfileScreen';
 import { ActivityScreen } from '@/screens/ActivityScreen';
@@ -33,6 +37,8 @@ type Route =
   | { name: 'new-challenge'; clubId: string }
   | { name: 'challenge'; clubId: string; challengeId: string };
 
+const onboardingStorageKey = 'color-club:onboarding-seen:v1';
+
 function SetupScreen() {
   return (
     <Screen>
@@ -45,6 +51,26 @@ function SetupScreen() {
           <Text selectable style={styles.codeBlock}>EXPO_PUBLIC_SUPABASE_URL=...{`\n`}EXPO_PUBLIC_SUPABASE_ANON_KEY=...</Text>
           <Body muted>Después reinicia Expo. Las instrucciones completas están en README.md.</Body>
         </Card>
+      </View>
+    </Screen>
+  );
+}
+
+function BiometricLockScreen({ error, loading, onRetry, onSignOut }: { error: string | null; loading: boolean; onRetry: () => void; onSignOut: () => void }) {
+  return (
+    <Screen scroll={false} bottomInset={24}>
+      <View style={styles.biometricLock}>
+        <View style={styles.biometricIcon}><Ionicons color={colors.ink} name="scan-outline" size={40} /></View>
+        <View style={styles.biometricCopy}>
+          <Text style={styles.biometricEyebrow}>SESIÓN PROTEGIDA</Text>
+          <Title>Desbloquea Color Club</Title>
+          <Body muted>Usa Face ID para continuar con tu sesión.</Body>
+        </View>
+        {error && <Text style={styles.biometricError}>{error}</Text>}
+        <View style={styles.biometricActions}>
+          <Button label="Usar Face ID" loading={loading} onPress={onRetry} />
+          <Button label="Entrar con otra cuenta" disabled={loading} onPress={onSignOut} variant="quiet" />
+        </View>
       </View>
     </Screen>
   );
@@ -78,20 +104,76 @@ function RouteTransition({ routeKey, children }: PropsWithChildren<{ routeKey: s
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
+  const [biometricUnlocked, setBiometricUnlocked] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricError, setBiometricError] = useState<string | null>(null);
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [accountToast, setAccountToast] = useState<string | null>(null);
   const [notificationToast, setNotificationToast] = useState<AppNotification | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
+  async function unlockWithFaceId() {
+    setBiometricLoading(true);
+    setBiometricError(null);
+    try {
+      if (Platform.OS !== 'ios' || Constants.executionEnvironment === 'storeClient') {
+        setBiometricUnlocked(true);
+        return;
+      }
+      const [hasHardware, isEnrolled, supportedTypes] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+        LocalAuthentication.supportedAuthenticationTypesAsync(),
+      ]);
+      const supportsFaceId = supportedTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION);
+      if (!hasHardware || !isEnrolled || !supportsFaceId) {
+        setBiometricUnlocked(true);
+        return;
+      }
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Desbloquea Color Club',
+        cancelLabel: 'Cancelar',
+        fallbackLabel: 'Usar código',
+      });
+      if (result.success) setBiometricUnlocked(true);
+      else setBiometricError('No se pudo verificar Face ID. Puedes intentarlo de nuevo.');
+    } catch {
+      setBiometricError('Face ID no está disponible ahora mismo. Inténtalo de nuevo.');
+    } finally {
+      setBiometricLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!isSupabaseConfigured) { setChecking(false); return; }
-    void supabase.auth.getSession().then(({ data }) => { setSession(data.session); setChecking(false); });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    void supabase.auth.getSession().then(async ({ data }) => {
+      setSession(data.session);
+      if (data.session) await unlockWithFaceId();
+      setChecking(false);
+    });
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
-      if (!nextSession) setRoute({ name: 'home' });
+      if (!nextSession) {
+        setBiometricUnlocked(false);
+        setBiometricError(null);
+        setRoute({ name: 'home' });
+      } else if (event === 'SIGNED_IN') {
+        setBiometricUnlocked(true);
+      }
     });
     return () => data.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    void AsyncStorage.getItem(onboardingStorageKey).then((value) => setHasSeenOnboarding(value === 'true')).catch(() => undefined).finally(() => setCheckingOnboarding(false));
+  }, []);
+
+  async function finishOnboarding() {
+    setHasSeenOnboarding(true);
+    await AsyncStorage.setItem(onboardingStorageKey, 'true');
+  }
 
   useEffect(() => {
     if (!session) return;
@@ -108,8 +190,10 @@ export default function App() {
   }, [session]);
 
   if (!isSupabaseConfigured) return <><StatusBar style="dark" /><SetupScreen /></>;
-  if (checking) return <View style={styles.loading}><StatusBar style="dark" /><ActivityIndicator color={colors.coral} /></View>;
+  if (checking || checkingOnboarding) return <View style={styles.loading}><StatusBar style="dark" /><ActivityIndicator color={colors.coral} /></View>;
+  if (!session && !hasSeenOnboarding) return <><StatusBar style="dark" /><OnboardingScreen onDone={() => void finishOnboarding()} /></>;
   if (!session) return <><StatusBar style="dark" /><AuthScreen /></>;
+  if (!biometricUnlocked) return <><StatusBar style="dark" /><BiometricLockScreen error={biometricError} loading={biometricLoading} onRetry={() => void unlockWithFaceId()} onSignOut={() => void supabase.auth.signOut()} /></>;
 
   let content;
   if (route.name === 'home') {
@@ -208,6 +292,12 @@ const styles = StyleSheet.create({
   mark: { flexDirection: 'row', gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   setupCard: { gap: 16 },
+  biometricLock: { flex: 1, justifyContent: 'center', gap: 24 },
+  biometricIcon: { width: 82, height: 82, borderRadius: 28, backgroundColor: colors.lavender, alignItems: 'center', justifyContent: 'center' },
+  biometricCopy: { gap: 8 },
+  biometricEyebrow: { color: colors.muted, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  biometricError: { color: colors.danger, fontSize: 14, lineHeight: 20 },
+  biometricActions: { gap: 8 },
   step: { color: colors.coral, fontSize: 11, fontWeight: '900', letterSpacing: 1.3 },
   code: { fontFamily: 'monospace', fontWeight: '700' },
   codeBlock: { fontFamily: 'monospace', fontSize: 12, lineHeight: 21, color: colors.cobalt, backgroundColor: colors.paper, padding: 12 },

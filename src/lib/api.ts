@@ -237,6 +237,18 @@ export async function getClubMembers(clubId: string): Promise<ClubMember[]> {
   return (data ?? []) as unknown as ClubMember[];
 }
 
+export async function getMyClubMembership(clubId: string, userId: string): Promise<ClubMember | null> {
+  const { data, error } = await supabase
+    .from('club_members')
+    .select('*, profiles!club_members_user_id_fkey(*)')
+    .eq('club_id', clubId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle();
+  fail(error);
+  return data as unknown as ClubMember | null;
+}
+
 export async function getClubMessages(clubId: string): Promise<ClubMessage[]> {
   const { data, error } = await supabase
     .from('club_messages')
@@ -253,14 +265,49 @@ export async function sendClubMessage(clubId: string, senderId: string, body: st
   fail(error);
 }
 
+export async function updateClubSettings(clubId: string, settings: {
+  name: string;
+  description: string;
+  themeColor: string;
+  invitesEnabled: boolean;
+  challengeCreationPolicy: Club['challenge_creation_policy'];
+  defaultDurationPreset: DurationPreset;
+  defaultPhotoCount: number;
+  chatEnabled: boolean;
+}) {
+  const { error } = await supabase.rpc('update_club_settings', {
+    target_club_id: clubId,
+    new_name: settings.name.trim(),
+    new_description: settings.description.trim(),
+    new_theme_color: settings.themeColor,
+    new_invites_enabled: settings.invitesEnabled,
+    new_challenge_creation_policy: settings.challengeCreationPolicy,
+    new_default_duration_preset: settings.defaultDurationPreset,
+    new_default_photo_count: settings.defaultPhotoCount,
+    new_chat_enabled: settings.chatEnabled,
+  });
+  fail(error);
+}
+
 export async function updateClubName(clubId: string, name: string) {
   const { error } = await supabase.rpc('update_club_name', { target_club_id: clubId, new_name: name.trim() });
   fail(error);
 }
 
-export async function setClubMemberRole(membershipId: string, role: 'member' | 'admin') {
+export async function setClubMemberRole(membershipId: string, role: ClubMember['role']) {
   const { error } = await supabase.rpc('set_club_member_role', { target_membership_id: membershipId, new_role: role });
   fail(error);
+}
+
+export async function transferClubAdmin(clubId: string, newAdminUserId: string) {
+  const { error } = await supabase.rpc('transfer_club_admin', { target_club_id: clubId, new_admin_user_id: newAdminUserId });
+  fail(error);
+}
+
+export async function regenerateClubInviteCode(clubId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('regenerate_club_invite_code', { target_club_id: clubId });
+  fail(error);
+  return data as string;
 }
 
 export async function removeClubMember(membershipId: string) {

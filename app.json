@@ -47,7 +47,13 @@
           "cameraPermission": "Color Club necesita la cámara para fotografiar tu color."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Color Club usa Face ID para proteger y desbloquear tu sesión."
+        }
+      ]
     ],
     "extra": {
       "eas": {

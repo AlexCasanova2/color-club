@@ -87,11 +87,14 @@ export function Button({
   );
 }
 
-export function Field({ label, ...props }: TextInputProps & { label: string }) {
+export function Field({ label, rightElement, inputStyle, ...props }: TextInputProps & { label: string; rightElement?: ReactNode; inputStyle?: TextInputProps['style'] }) {
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput placeholderTextColor={colors.muted} style={styles.input} {...props} />
+      <View style={styles.inputWrap}>
+        <TextInput placeholderTextColor={colors.muted} style={[styles.input, rightElement ? styles.inputWithRightElement : null, inputStyle]} {...props} />
+        {rightElement && <View style={styles.inputRightElement}>{rightElement}</View>}
+      </View>
     </View>
   );
 }
@@ -156,7 +159,10 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.75, transform: [{ translateY: 1 }] },
   fieldWrap: { gap: 7 },
   label: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+  inputWrap: { position: 'relative' },
   input: { minHeight: 54, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, borderRadius: 18, paddingHorizontal: 16, color: colors.ink, fontSize: 16 },
+  inputWithRightElement: { paddingRight: 56 },
+  inputRightElement: { position: 'absolute', right: 6, top: 6, bottom: 6, justifyContent: 'center' },
   header: { minHeight: 74, justifyContent: 'center', paddingTop: 6 },
   island: { minHeight: 54, paddingHorizontal: 8, borderRadius: 28, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', shadowColor: colors.ink, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.16, shadowRadius: 14, elevation: 7 },
   headerSide: { width: 46, justifyContent: 'center' },
