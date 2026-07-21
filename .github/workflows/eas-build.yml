@@ -30,11 +30,6 @@ on:
         required: true
         default: true
         type: boolean
-      what_to_test:
-        description: TestFlight notes
-        required: false
-        default: Color Club beta build.
-        type: string
 
 jobs:
   build:
@@ -72,7 +67,7 @@ jobs:
           fi
 
           if [ "${{ inputs.submit_to_testflight }}" = "true" ] && [ "${{ inputs.platform }}" = "ios" ] && [ "${{ inputs.profile }}" = "production" ]; then
-            BUILD_ARGS+=(--auto-submit-with-profile production --what-to-test "${{ inputs.what_to_test }}")
+            BUILD_ARGS+=(--auto-submit-with-profile production)
           fi
 
           eas build "${BUILD_ARGS[@]}"
