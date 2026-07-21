@@ -9,6 +9,7 @@ function isJwtFutureError(error: { message: string } | null) {
 function fail(error: { message: string } | null) {
   if (!error) return;
   if (isJwtFutureError(error)) throw new Error('Tu sesión necesita actualizarse. Revisa que la hora del dispositivo esté en automático y vuelve a intentarlo.');
+  if (error.message.toLowerCase().includes('row-level security')) throw new Error('No has llegado a tiempo. El reto ya ha terminado y el collage está cerrado.');
   throw new Error(error.message);
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { ActivityIndicator, Alert, Image, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Body, Button, Card, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
 import { advanceChallenge, castVote, deletePhoto, getChallenge, submitCollage, uploadPhoto } from '@/lib/api';
@@ -28,14 +28,21 @@ function readableTextColor(hex: string) {
   return (red * 299 + green * 587 + blue * 114) / 1000 > 150 ? colors.ink : colors.white;
 }
 
-function Collage({ participant, photoCount = 6 }: { participant: Participant; photoCount?: number }) {
-  const rows = Math.ceil(photoCount / 2);
+function collageLayout(photoCount: number) {
+  if (photoCount === 2) return { aspectRatio: 0.9, columns: 1, rows: 2 };
+  return { aspectRatio: 1.44 / Math.ceil(photoCount / 2), columns: 2, rows: Math.ceil(photoCount / 2) };
+}
+
+function Collage({ participant, photoCount = 6, showSlotNumbers = false, style }: { participant: Participant; photoCount?: number; showSlotNumbers?: boolean; style?: ViewStyle }) {
+  const layout = collageLayout(photoCount);
   return (
-    <View style={[styles.collage, { aspectRatio: 1.44 / rows }]}>
+    <View style={[styles.collage, { aspectRatio: layout.aspectRatio }, style]}>
       {Array.from({ length: photoCount }, (_, index) => {
         const photo = participant.photos?.find((item) => item.slot_order === index + 1);
-        const slotStyle = { width: '50%' as const, height: `${100 / rows}%` as `${number}%` };
-        return photo?.photo_url ? <Image key={index} source={{ uri: photo.photo_url }} style={[styles.collagePhoto, slotStyle]} /> : <View key={index} style={[styles.collagePhoto, slotStyle, styles.photoMissing]} />;
+        const slotStyle = { width: `${100 / layout.columns}%` as `${number}%`, height: `${100 / layout.rows}%` as `${number}%` };
+        return photo?.photo_url ? <Image key={index} resizeMode="cover" source={{ uri: photo.photo_url }} style={[styles.collagePhoto, slotStyle]} /> : (
+          <View key={index} style={[styles.collagePhoto, slotStyle, styles.photoMissing]}>{showSlotNumbers && <Text style={styles.previewSlot}>{index + 1}</Text>}</View>
+        );
       })}
     </View>
   );
@@ -58,6 +65,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   const [cropImageSize, setCropImageSize] = useState({ width: 0, height: 0 });
   const [cropFrameSize, setCropFrameSize] = useState({ width: 0, height: 0 });
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const [viewingParticipant, setViewingParticipant] = useState<Participant | null>(null);
   const [clockTick, setClockTick] = useState(Date.now());
   const cropStart = useRef({ x: 0, y: 0 });
   const advancedDeadline = useRef<string | null>(null);
@@ -131,6 +139,12 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   }
 
   async function choosePhoto(slot: number, camera: boolean) {
+    if (!challenge || !me || me.status !== 'pending' || challenge.status !== 'active' || new Date(challenge.ends_at).getTime() <= Date.now()) {
+      Alert.alert('Se acabó el tiempo', 'No has llegado a tiempo para añadir esta foto. Tu collage está cerrado y el reto pasa a la siguiente fase.');
+      if (challenge) await advanceChallenge(challenge.id).catch(() => undefined);
+      await load(true);
+      return;
+    }
     if (camera) {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -142,10 +156,25 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.9, allowsEditing: false })
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, allowsEditing: false });
     if (result.canceled || !me) return;
+    if (!challenge || me.status !== 'pending' || challenge.status !== 'active' || new Date(challenge.ends_at).getTime() <= Date.now()) {
+      Alert.alert('Se acabó el tiempo', 'No has llegado a tiempo para añadir esta foto. Tu collage está cerrado y el reto pasa a la siguiente fase.');
+      if (challenge) await advanceChallenge(challenge.id).catch(() => undefined);
+      await load(true);
+      return;
+    }
     setBusy(slot);
     setError(null);
     try { await uploadPhoto(me.id, slot, result.assets[0]!.uri); await load(true); }
-    catch (caught) { setError((caught as Error).message); }
+    catch (caught) {
+      const message = (caught as Error).message;
+      if (message.startsWith('No has llegado a tiempo')) {
+        Alert.alert('Se acabó el tiempo', 'No has llegado a tiempo para añadir esta foto. Tu collage está cerrado y el reto pasa a la siguiente fase.');
+        if (challenge) await advanceChallenge(challenge.id).catch(() => undefined);
+        await load(true);
+      } else {
+        setError(message);
+      }
+    }
     setBusy(null);
     setSelectedSlot(null);
   }
@@ -257,7 +286,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   });
   const submissionProgress = participants.length ? `${(submitted / participants.length) * 100}%` as `${number}%` : '0%';
   const photoCount = challenge.photo_count ?? 6;
-  const collageRows = Math.ceil(photoCount / 2);
+  const layout = collageLayout(photoCount);
   const revealColor = revealStopped && targetColor ? targetColor : revealColors[wheelIndex] ?? colors.ink;
   const revealTextColor = readableTextColor(revealColor);
   const revealTitle = revealStopped ? 'Este es tu color' : 'Asignando color...';
@@ -309,12 +338,12 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
           <View style={styles.headingText}><Eyebrow>Quedan {remaining(challenge.ends_at)}</Eyebrow><Title size="medium">Caza este color</Title></View>
         </View>
         <Body muted>Busca {photoCount} momentos donde domine tu color. No hace falta que sean perfectos; sí que sean tuyos.</Body>
-        <View style={[styles.editGrid, { aspectRatio: 1.44 / collageRows }]}>
+        <View style={[styles.editGrid, { aspectRatio: layout.aspectRatio }]}>
           {Array.from({ length: photoCount }, (_, index) => {
             const slot = index + 1;
             const photo = me.photos?.find((item) => item.slot_order === slot);
             return (
-              <Pressable key={slot} onPress={() => photo ? setSelectedSlot(slot) : photoAction(slot)} style={({ pressed }) => [styles.editSlot, { height: `${100 / collageRows}%` }, pressed && styles.pressedSlot]}>
+              <Pressable key={slot} onPress={() => photo ? setSelectedSlot(slot) : photoAction(slot)} style={({ pressed }) => [styles.editSlot, { width: `${100 / layout.columns}%`, height: `${100 / layout.rows}%` }, pressed && styles.pressedSlot]}>
                 {photo?.photo_url ? <Image resizeMode="cover" source={{ uri: photo.photo_url }} style={styles.editImage} /> : (
                   <View style={styles.emptySlotContent}>
                     <Ionicons color={colors.ink} name="camera-outline" size={28} />
@@ -333,23 +362,21 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
         <Text style={styles.progress}>{completed} de {photoCount} fotos listas</Text>
         <ErrorText message={error} />
         <View style={styles.actionStack}>
+          <Button label="Ver collage completo" onPress={() => setPreviewOpen(true)} variant="secondary" disabled={completed === 0} />
           <Button label="Enviar collage definitivo" onPress={finalize} disabled={completed !== photoCount} loading={busy === 'submit'} />
         </View>
         <Modal animationType="fade" transparent visible={previewOpen} onRequestClose={() => setPreviewOpen(false)}>
           <View style={styles.previewRoot}>
             <View style={styles.previewHeader}>
-              <Text style={styles.previewTitle}>Previsualización</Text>
+              <View><Text style={styles.previewKicker}>ASÍ LO VERÁ EL CLUB</Text><Text style={styles.previewTitle}>Tu collage</Text></View>
               <Pressable accessibilityRole="button" accessibilityLabel="Cerrar previsualización" onPress={() => setPreviewOpen(false)} style={styles.previewClose}>
                 <Ionicons color={colors.white} name="close" size={22} />
               </Pressable>
             </View>
-            <View style={[styles.previewCard, { aspectRatio: 1.44 / collageRows }]}>
-              {Array.from({ length: photoCount }, (_, index) => {
-                const photo = me.photos?.find((item) => item.slot_order === index + 1);
-                const slotStyle = { height: `${100 / collageRows}%` as `${number}%` };
-                return photo?.photo_url ? <Image key={index} source={{ uri: photo.photo_url }} style={[styles.previewPhoto, slotStyle]} /> : <View key={index} style={[styles.previewPhoto, slotStyle, styles.previewMissing]}><Text style={styles.previewSlot}>{index + 1}</Text></View>;
-              })}
-            </View>
+            <ScrollView contentContainerStyle={styles.previewContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.previewFrame}><Collage participant={me} photoCount={photoCount} showSlotNumbers style={styles.previewCollage} /></View>
+              <View style={styles.previewFooter}><Ionicons color={colors.green} name="eye-outline" size={18} /><Text style={styles.previewHint}>Esta composición será idéntica en la votación y en los resultados.</Text></View>
+            </ScrollView>
           </View>
         </Modal>
         <Modal animationType="fade" transparent visible={selectedSlot !== null} onRequestClose={() => setSelectedSlot(null)}>
@@ -387,7 +414,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
               } : undefined;
               return photo ? (
                 <View style={styles.cropContent}>
-                  <View onLayout={(event) => setCropFrameSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={styles.cropFrame} {...cropPanResponder.panHandlers}>
+                  <View onLayout={(event) => setCropFrameSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={[styles.cropFrame, photoCount === 2 && styles.cropFrameWide]} {...cropPanResponder.panHandlers}>
                     <Image source={{ uri: photo.photo_url }} style={[styles.cropImage, imageStyle]} />
                     <View pointerEvents="none" style={styles.cropGuide} />
                   </View>
@@ -487,20 +514,42 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
       <Screen>
         <Header title="Votación" onBack={onBack} />
         {revealModal}
-        <View style={styles.heading}><Eyebrow>Un voto. Sin marcha atrás.</Eyebrow><Title>Tu favorito</Title><Body muted>Elige el collage que mejor captura el color del reto.</Body></View>
+        <View style={styles.heading}><Eyebrow>Mira cada composición con calma</Eyebrow><Title>Tu favorito</Title><Body muted>Toca un collage para verlo a pantalla completa. Tienes un voto y no se puede cambiar.</Body></View>
         {me.status === 'disqualified' && <Card style={styles.notice}><Body>No completaste el reto, así que esta vez no puedes votar.</Body></Card>}
         {votedId && <Card style={styles.notice}><Body>Voto enviado. El resultado aparecerá cuando cierre la votación.</Body></Card>}
         <View style={styles.candidates}>
           {candidates.map((participant) => (
-            <Card key={participant.id} style={participant.status === 'disqualified' ? styles.disqualified : undefined}>
-              <View style={styles.candidateHeader}><Text style={styles.candidateName}>{participant.profiles.display_name}</Text><Text style={styles.candidateState}>{participant.status === 'disqualified' ? 'No completó' : ''}</Text></View>
-              {participant.status === 'submitted' && <Collage participant={participant} photoCount={photoCount} />}
-              {participant.status === 'submitted' && !votedId && me.status === 'submitted' && <Button label="Este es mi voto" onPress={() => vote(participant.id)} loading={busy === 'vote'} />}
-              {votedId === participant.id && <Text style={styles.yourVote}>Tu voto</Text>}
+            <Card key={participant.id} style={participant.status === 'disqualified' ? { ...styles.candidateCard, ...styles.disqualified } : styles.candidateCard}>
+              <View style={styles.candidateHeader}>
+                {participant.profiles.avatar_url ? <Image source={{ uri: participant.profiles.avatar_url }} style={styles.candidateAvatar} /> : (
+                  <View style={[styles.candidateAvatar, styles.candidateAvatarFallback, { backgroundColor: participant.profiles.avatar_color || colors.lavender }]}><Text style={styles.candidateInitial}>{participant.profiles.display_name.trim().charAt(0).toUpperCase()}</Text></View>
+                )}
+                <View style={styles.candidateIdentity}><Text style={styles.candidateName}>{participant.profiles.display_name}</Text><Text style={styles.candidateSubtitle}>{participant.status === 'disqualified' ? 'No completó el reto' : 'Collage final'}</Text></View>
+                {votedId === participant.id && <View style={styles.voteBadge}><Ionicons color={colors.ink} name="checkmark" size={16} /><Text style={styles.voteBadgeText}>Tu voto</Text></View>}
+              </View>
+              {participant.status === 'submitted' && (
+                <Pressable accessibilityLabel={`Ampliar collage de ${participant.profiles.display_name}`} accessibilityRole="button" onPress={() => setViewingParticipant(participant)} style={({ pressed }) => [styles.candidateCollageWrap, pressed && styles.pressedSlot]}>
+                  <Collage participant={participant} photoCount={photoCount} style={styles.candidateCollage} />
+                  <View style={styles.expandBadge}><Ionicons color={colors.white} name="expand-outline" size={17} /><Text style={styles.expandText}>Ver en grande</Text></View>
+                </Pressable>
+              )}
+              {participant.status === 'submitted' && !votedId && me.status === 'submitted' && <View style={styles.candidateAction}><Button label="Votar este collage" onPress={() => vote(participant.id)} loading={busy === 'vote'} /></View>}
             </Card>
           ))}
         </View>
         <ErrorText message={error} />
+        <Modal animationType="fade" visible={viewingParticipant !== null} onRequestClose={() => setViewingParticipant(null)}>
+          <View style={styles.collageViewer}>
+            <View style={styles.collageViewerHeader}>
+              <View><Text style={styles.collageViewerKicker}>COLLAGE FINAL</Text><Text style={styles.collageViewerName}>{viewingParticipant?.profiles.display_name}</Text></View>
+              <Pressable accessibilityLabel="Cerrar collage" accessibilityRole="button" onPress={() => setViewingParticipant(null)} style={styles.collageViewerClose}><Ionicons color={colors.white} name="close" size={23} /></Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.collageViewerContent} showsVerticalScrollIndicator={false}>
+              {viewingParticipant && <Collage participant={viewingParticipant} photoCount={photoCount} style={styles.viewerCollage} />}
+              <Text style={styles.collageViewerHint}>Desliza para revisar la composición completa.</Text>
+            </ScrollView>
+          </View>
+        </Modal>
       </Screen>
     );
   }
@@ -515,7 +564,11 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
     <Screen>
       <Header title="Resultados" onBack={onBack} />
       {revealModal}
-      <View style={styles.heading}><Eyebrow>Reto cerrado</Eyebrow><Title>El veredicto</Title><Body muted>Los votos están a la vista. Los empates comparten posición.</Body></View>
+      <View style={styles.resultsHero}>
+        <View style={styles.resultsHeroTop}><Text style={styles.resultsKicker}>RETO CERRADO</Text><View style={styles.resultsIcon}><Ionicons color={colors.ink} name="trophy-outline" size={20} /></View></View>
+        <Title>El veredicto</Title>
+        <Body>Explora cada collage a pantalla completa. Los empates comparten posición.</Body>
+      </View>
       <View style={styles.results}>
         {ordered.map((participant, index) => {
           const position = participant.score === previousScore ? previousPosition : index + 1;
@@ -523,14 +576,41 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
           previousPosition = position;
           const voterNames = votes.filter((voteItem) => voteItem.voted_participant_id === participant.id).map((voteItem) => participants.find((item) => item.user_id === voteItem.voter_id)?.profiles.display_name).filter(Boolean);
           return (
-            <Card key={participant.id} style={participant.status === 'disqualified' ? styles.disqualified : undefined}>
-              <View style={styles.resultHeader}><Text style={styles.resultPosition}>{participant.status === 'disqualified' ? '—' : `#${position}`}</Text><View style={styles.resultIdentity}><Text style={styles.candidateName}>{participant.profiles.display_name}</Text><Text style={styles.voteCount}>{participant.status === 'disqualified' ? 'No completó' : `${participant.score} voto${participant.score === 1 ? '' : 's'}`}</Text></View></View>
-              {participant.status === 'submitted' && <Collage participant={participant} photoCount={photoCount} />}
-              {participant.status === 'submitted' && <Text style={styles.voters}>{voterNames.length ? `Votaron: ${voterNames.join(', ')}` : 'Nadie votó este collage'}</Text>}
+            <Card key={participant.id} style={{ ...styles.resultCard, ...(position === 1 && participant.status === 'submitted' ? styles.winnerCard : {}), ...(participant.status === 'disqualified' ? styles.disqualified : {}) }}>
+              <View style={styles.resultHeader}>
+                <View style={[styles.resultPosition, position === 1 && participant.status === 'submitted' && styles.winnerPosition]}><Text style={styles.resultPositionText}>{participant.status === 'disqualified' ? '—' : `#${position}`}</Text></View>
+                {participant.profiles.avatar_url ? <Image source={{ uri: participant.profiles.avatar_url }} style={styles.resultAvatar} /> : <View style={[styles.resultAvatar, styles.candidateAvatarFallback, { backgroundColor: participant.profiles.avatar_color || colors.lavender }]}><Text style={styles.candidateInitial}>{participant.profiles.display_name.trim().charAt(0).toUpperCase()}</Text></View>}
+                <View style={styles.resultIdentity}><Text style={styles.candidateName}>{participant.profiles.display_name}</Text><Text style={styles.voteCount}>{participant.status === 'disqualified' ? 'No completó' : `${participant.score} voto${participant.score === 1 ? '' : 's'}`}</Text></View>
+                {position === 1 && participant.status === 'submitted' && <Ionicons color={colors.ink} name="trophy" size={22} />}
+              </View>
+              {participant.status === 'submitted' && (
+                <Pressable
+                  accessibilityLabel={`Ampliar collage de ${participant.profiles.display_name}`}
+                  accessibilityRole="button"
+                  onPress={() => setViewingParticipant(participant)}
+                  style={({ pressed }) => [styles.resultCollageWrap, pressed && styles.pressedSlot]}
+                >
+                  <Collage participant={participant} photoCount={photoCount} style={styles.resultCollage} />
+                  <View style={styles.expandBadge}><Ionicons color={colors.white} name="expand-outline" size={17} /><Text style={styles.expandText}>Ver en grande</Text></View>
+                </Pressable>
+              )}
+              {participant.status === 'submitted' && <View style={styles.votersWrap}><Text style={styles.voters}>{voterNames.length ? `Votaron: ${voterNames.join(', ')}` : 'Nadie votó este collage'}</Text></View>}
             </Card>
           );
         })}
       </View>
+      <Modal animationType="fade" visible={viewingParticipant !== null} onRequestClose={() => setViewingParticipant(null)}>
+        <View style={styles.collageViewer}>
+          <View style={styles.collageViewerHeader}>
+            <View><Text style={styles.collageViewerKicker}>COLLAGE FINAL</Text><Text style={styles.collageViewerName}>{viewingParticipant?.profiles.display_name}</Text></View>
+            <Pressable accessibilityLabel="Cerrar collage" accessibilityRole="button" onPress={() => setViewingParticipant(null)} style={styles.collageViewerClose}><Ionicons color={colors.white} name="close" size={23} /></Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.collageViewerContent} showsVerticalScrollIndicator={false}>
+            {viewingParticipant && <Collage participant={viewingParticipant} photoCount={photoCount} style={styles.viewerCollage} />}
+            <Text style={styles.collageViewerHint}>Collage completo de {viewingParticipant?.profiles.display_name}</Text>
+          </ScrollView>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -578,10 +658,16 @@ const styles = StyleSheet.create({
   progressDotDone: { width: 22, backgroundColor: colors.ink },
   progress: { textAlign: 'center', color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 14 },
   actionStack: { gap: 10 },
-  previewRoot: { flex: 1, backgroundColor: '#000000E6', padding: 18, paddingTop: 72, justifyContent: 'center' },
+  previewRoot: { flex: 1, backgroundColor: colors.ink, paddingHorizontal: 18, paddingTop: 116 },
   previewHeader: { position: 'absolute', top: 54, left: 18, right: 18, zIndex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  previewTitle: { color: colors.white, fontSize: 18, fontWeight: '800' },
+  previewKicker: { color: colors.green, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 3 },
+  previewTitle: { color: colors.white, fontSize: 25, lineHeight: 29, fontWeight: '900' },
   previewClose: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFFFFF22', alignItems: 'center', justifyContent: 'center' },
+  previewContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 38 },
+  previewFrame: { borderRadius: 24, padding: 7, backgroundColor: colors.white, shadowColor: '#000000', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.35, shadowRadius: 22, elevation: 12 },
+  previewCollage: { marginBottom: 0, borderRadius: 18, overflow: 'hidden' },
+  previewFooter: { marginTop: 18, minHeight: 52, borderRadius: 18, paddingHorizontal: 14, backgroundColor: '#FFFFFF12', flexDirection: 'row', alignItems: 'center', gap: 10 },
+  previewHint: { flex: 1, color: colors.white, opacity: 0.68, fontSize: 12, lineHeight: 17 },
   previewCard: { width: '100%', overflow: 'hidden', backgroundColor: colors.paper, flexDirection: 'row', flexWrap: 'wrap', gap: 0 },
   previewPhoto: { width: '50%' },
   previewMissing: { backgroundColor: '#2A2A2D', alignItems: 'center', justifyContent: 'center' },
@@ -594,6 +680,7 @@ const styles = StyleSheet.create({
   cropHeader: { position: 'absolute', top: 54, left: 18, right: 18, zIndex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cropContent: { gap: 16 },
   cropFrame: { width: '100%', aspectRatio: 0.72, backgroundColor: colors.ink, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  cropFrameWide: { aspectRatio: 1.8 },
   cropImage: { position: 'absolute' },
   cropGuide: { ...StyleSheet.absoluteFillObject, borderWidth: 2, borderColor: '#FFFFFFAA' },
   cropHint: { color: colors.white, opacity: 0.72, textAlign: 'center', fontSize: 13, lineHeight: 18 },
@@ -636,18 +723,51 @@ const styles = StyleSheet.create({
   doneBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   notice: { marginBottom: 16, backgroundColor: colors.yellow, borderWidth: 0 },
   candidates: { gap: 18 },
+  candidateCard: { overflow: 'hidden' },
   candidateHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
+  candidateAvatar: { width: 44, height: 44, borderRadius: 15 },
+  candidateAvatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  candidateInitial: { color: colors.ink, fontSize: 16, fontWeight: '900' },
+  candidateIdentity: { flex: 1, minWidth: 0, justifyContent: 'center', marginHorizontal: 12 },
   candidateName: { color: colors.ink, fontSize: 19, fontWeight: '800' },
+  candidateSubtitle: { color: colors.muted, fontSize: 12, marginTop: 3 },
   candidateState: { color: colors.danger, fontSize: 12, fontWeight: '600' },
+  candidateCollageWrap: { position: 'relative', overflow: 'hidden', borderRadius: 18, backgroundColor: colors.ink },
+  candidateCollage: { marginBottom: 0 },
+  candidateAction: { marginTop: 14 },
+  voteBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 4, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 7, backgroundColor: colors.green },
+  voteBadgeText: { color: colors.ink, fontSize: 10, fontWeight: '900' },
+  expandBadge: { position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#111217D9' },
+  expandText: { color: colors.white, fontSize: 11, fontWeight: '800' },
   collage: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
   collagePhoto: { width: '33.333%', aspectRatio: 1, borderWidth: 1, borderColor: colors.surface },
   photoMissing: { backgroundColor: colors.line },
   disqualified: { opacity: 0.52 },
   yourVote: { color: colors.green, textAlign: 'center', fontWeight: '600', marginTop: 5 },
-  results: { gap: 16 },
-  resultHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  resultPosition: { color: colors.ink, fontSize: 32, fontWeight: '900', width: 65 },
+  resultsHero: { minHeight: 220, marginTop: 18, marginBottom: 18, borderRadius: 30, padding: 22, backgroundColor: colors.lavender, justifyContent: 'flex-end', gap: 8, overflow: 'hidden' },
+  resultsHeroTop: { position: 'absolute', left: 22, right: 22, top: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  resultsKicker: { color: '#11121799', fontSize: 11, fontWeight: '900', letterSpacing: 1.1 },
+  resultsIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '6deg' }] },
+  results: { gap: 18 },
+  resultCard: { padding: 0, overflow: 'hidden' },
+  winnerCard: { borderColor: colors.yellow, borderWidth: 3 },
+  resultHeader: { minHeight: 82, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  resultPosition: { minWidth: 43, height: 34, paddingHorizontal: 9, borderRadius: 13, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center' },
+  winnerPosition: { backgroundColor: colors.yellow },
+  resultPositionText: { color: colors.ink, fontSize: 17, fontWeight: '900' },
+  resultAvatar: { width: 42, height: 42, borderRadius: 14 },
   resultIdentity: { flex: 1 },
   voteCount: { color: colors.muted, marginTop: 3 },
+  resultCollageWrap: { position: 'relative', overflow: 'hidden', backgroundColor: colors.ink },
+  resultCollage: { marginBottom: 0 },
+  votersWrap: { minHeight: 52, paddingHorizontal: 16, justifyContent: 'center' },
   voters: { color: colors.muted, fontSize: 12, lineHeight: 18 },
+  collageViewer: { flex: 1, backgroundColor: colors.ink },
+  collageViewerHeader: { paddingTop: 64, paddingHorizontal: 20, paddingBottom: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  collageViewerKicker: { color: colors.green, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  collageViewerName: { color: colors.white, fontSize: 25, lineHeight: 30, fontWeight: '900', marginTop: 4 },
+  collageViewerClose: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF1F', alignItems: 'center', justifyContent: 'center' },
+  collageViewerContent: { flexGrow: 1, paddingHorizontal: 14, paddingBottom: 40, justifyContent: 'center' },
+  viewerCollage: { width: '100%', marginBottom: 0, borderRadius: 6, overflow: 'hidden', backgroundColor: '#292A31' },
+  collageViewerHint: { color: colors.white, opacity: 0.58, textAlign: 'center', fontSize: 12, marginTop: 16 },
 });
