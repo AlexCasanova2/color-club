@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import * as ImagePicker from 'expo-image-picker';
-import { decode } from 'base64-arraybuffer';
+import { ToastOverlay } from '@/components/Toast';
 import { Body, Button, ErrorText, Field, Header, Screen, Title } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
@@ -30,15 +29,11 @@ function SettingRow({ icon, title, description, value, onChange, last = false }:
   );
 }
 
-export function AccountScreen({ userId, email }: { userId: string; email: string }) {
+export function AccountScreen({ userId, email, onEditProfile, toastMessage, onToastShown }: { userId: string; email: string; onEditProfile: () => void; toastMessage?: string | null; onToastShown?: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastKey, setToastKey] = useState(0);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteText, setDeleteText] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -46,80 +41,15 @@ export function AccountScreen({ userId, email }: { userId: string; email: string
   useEffect(() => {
     void supabase.from('profiles').select('*').eq('id', userId).single().then(({ data, error: profileError }) => {
       if (profileError) setError(profileError.message);
-      else {
-        const nextProfile = data as Profile;
-        setProfile(nextProfile);
-        setDisplayName(nextProfile.display_name);
-        setUsername(nextProfile.username);
-      }
+      else setProfile(data as Profile);
     });
   }, [userId]);
 
-  async function saveProfile() {
-    const normalized = username.trim().toLowerCase().replace(/^@/, '');
-    if (displayName.trim().length < 2) { setError('El nombre debe tener al menos 2 caracteres.'); return; }
-    if (!/^[a-z0-9_]{3,32}$/.test(normalized)) {
-      setError('El usuario debe tener entre 3 y 32 caracteres: letras minúsculas, números o guion bajo.');
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    const { data, error: updateError } = await supabase.from('profiles').update({ display_name: displayName.trim(), username: normalized }).eq('id', userId).select('*').single();
-    if (updateError) setError(updateError.code === '23505' ? 'Ese nombre de usuario ya está ocupado.' : updateError.message);
-    else {
-      setProfile(data as Profile);
-      setDisplayName(data.display_name as string);
-      setUsername(data.username as string);
-      showToast('Perfil actualizado.');
-    }
-    setSaving(false);
-  }
-
-  async function uploadAvatar(uri: string) {
-    setUploadingAvatar(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = reject;
-        reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-        reader.readAsDataURL(blob);
-      });
-      const path = `${userId}/avatar-${Date.now()}.jpg`;
-      const upload = await supabase.storage.from('avatars').upload(path, decode(base64), {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
-      if (upload.error) throw upload.error;
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-      const update = await supabase.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', userId).select('*').single();
-      if (update.error) throw update.error;
-      setProfile(update.data as Profile);
-      showToast('Foto de perfil actualizada.');
-    } catch (caught) {
-      setError((caught as Error).message);
-    }
-    setUploadingAvatar(false);
-  }
-
-  async function chooseAvatar(camera: boolean) {
-    const result = camera
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.82, allowsEditing: true, aspect: [1, 1] })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.82, allowsEditing: true, aspect: [1, 1] });
-    if (!result.canceled) await uploadAvatar(result.assets[0]!.uri);
-  }
-
-  function openAvatarPicker() {
-    Alert.alert('Foto de perfil', 'Actualiza tu imagen pública.', [
-      { text: 'Cámara', onPress: () => void chooseAvatar(true) },
-      { text: 'Galería', onPress: () => void chooseAvatar(false) },
-      { text: 'Cancelar', style: 'cancel' },
-    ]);
-  }
+  useEffect(() => {
+    if (!toastMessage) return;
+    showToast(toastMessage);
+    onToastShown?.();
+  }, [toastMessage, onToastShown]);
 
   async function copyFriendCode() {
     if (!profile) return;
@@ -129,7 +59,7 @@ export function AccountScreen({ userId, email }: { userId: string; email: string
 
   function showToast(text: string) {
     setToast(text);
-    setTimeout(() => setToast(null), 1500);
+    setToastKey((current) => current + 1);
   }
 
   async function updateSetting(key: BooleanSetting, value: boolean) {
@@ -163,10 +93,9 @@ export function AccountScreen({ userId, email }: { userId: string; email: string
       {!profile && !error ? <ActivityIndicator style={styles.loader} color={colors.coral} /> : profile && (
         <>
           <View style={styles.profileHero}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Cambiar foto de perfil" onPress={openAvatarPicker} style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}>
-              {profile.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} /> : <Text style={styles.initial}>{profile.display_name.charAt(0).toUpperCase()}</Text>}
-              <View style={styles.cameraBadge}>{uploadingAvatar ? <ActivityIndicator color={colors.ink} size="small" /> : <Ionicons color={colors.ink} name="camera" size={15} />}</View>
-            </Pressable>
+            <View style={styles.avatar}>
+              {profile.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} /> : <Text style={[styles.initial, { backgroundColor: profile.avatar_color ?? colors.ink }]}>{profile.display_name.charAt(0).toUpperCase()}</Text>}
+            </View>
             <View style={styles.identity}><Text style={styles.name}>{profile.display_name}</Text><Text style={styles.username}>@{profile.username}</Text><Text style={styles.email}>{email}</Text></View>
             <View style={styles.heroShape} />
           </View>
@@ -178,12 +107,11 @@ export function AccountScreen({ userId, email }: { userId: string; email: string
             <Ionicons color={colors.ink} name="copy-outline" size={18} />
           </Pressable>
 
-          <Text style={styles.sectionTitle}>Perfil público</Text>
-          <View style={[styles.sectionCard, styles.publicSection]}>
-            <Field label="Nombre visible" value={displayName} onChangeText={setDisplayName} autoCapitalize="words" />
-            <Field label="Nombre de usuario" value={username} onChangeText={setUsername} autoCapitalize="none" autoCorrect={false} />
-            <Button label="Guardar cambios" onPress={saveProfile} loading={saving} disabled={displayName === profile.display_name && username === profile.username} />
-          </View>
+          <Pressable onPress={onEditProfile} style={({ pressed }) => [styles.editProfileCard, pressed && styles.pressed]}>
+            <View style={styles.editProfileIcon}><Ionicons color={colors.ink} name="create-outline" size={22} /></View>
+            <View style={styles.settingCopy}><Text style={styles.editProfileTitle}>Editar perfil</Text><Text style={styles.settingDescription}>Nombre, usuario y foto pública</Text></View>
+            <Ionicons color={colors.ink} name="chevron-forward" size={19} />
+          </Pressable>
 
           <Text style={styles.sectionTitle}>Notificaciones</Text>
           <View style={styles.sectionCard}>
@@ -228,14 +156,7 @@ export function AccountScreen({ userId, email }: { userId: string; email: string
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
-      <Modal animationType="fade" transparent visible={toast !== null}>
-        <View pointerEvents="none" style={styles.toastLayer}>
-          <View style={styles.toast}>
-            <Ionicons color={colors.ink} name="checkmark-circle" size={20} />
-            <Text style={styles.toastText}>{toast}</Text>
-          </View>
-        </View>
-      </Modal>
+      <ToastOverlay message={toast} onHidden={() => setToast(null)} trigger={toastKey} />
     </Screen>
   );
 }
@@ -246,8 +167,7 @@ const styles = StyleSheet.create({
   profileHero: { minHeight: 154, padding: 22, borderRadius: 30, backgroundColor: colors.lavender, flexDirection: 'row', alignItems: 'center', gap: 16, overflow: 'hidden' },
   avatar: { width: 78, height: 78, borderRadius: 39, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   avatarImage: { width: 78, height: 78, borderRadius: 39 },
-  initial: { color: colors.white, fontSize: 28, fontWeight: '800' },
-  cameraBadge: { position: 'absolute', right: -2, bottom: -1, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.white, borderWidth: 2, borderColor: colors.lavender, alignItems: 'center', justifyContent: 'center' },
+  initial: { width: 78, height: 78, borderRadius: 39, overflow: 'hidden', color: colors.white, fontSize: 28, lineHeight: 78, textAlign: 'center', fontWeight: '800' },
   identity: { flex: 1, gap: 3, zIndex: 2 },
   name: { color: colors.ink, fontSize: 23, fontWeight: '900' },
   username: { color: colors.ink, fontSize: 14, fontWeight: '700' },
@@ -261,7 +181,9 @@ const styles = StyleSheet.create({
   code: { color: colors.ink, fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
   sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: '800', marginTop: 30, marginBottom: 10 },
   sectionCard: { backgroundColor: colors.surface, borderRadius: 24, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 16, overflow: 'hidden' },
-  publicSection: { paddingVertical: 18, gap: 14, backgroundColor: colors.blue, borderWidth: 0 },
+  editProfileCard: { minHeight: 84, marginTop: 12, paddingHorizontal: 16, borderRadius: 24, backgroundColor: colors.blue, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  editProfileIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: '#FFFFFF88', alignItems: 'center', justifyContent: 'center' },
+  editProfileTitle: { color: colors.ink, fontSize: 15, fontWeight: '800' },
   settingRow: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: colors.line },
   lastRow: { borderBottomWidth: 0 },
   settingIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center' },
@@ -280,7 +202,4 @@ const styles = StyleSheet.create({
   scrim: { flex: 1, backgroundColor: '#00000077' },
   deleteSheet: { padding: 24, paddingTop: 28, paddingBottom: 36, gap: 16, backgroundColor: colors.paper, borderTopLeftRadius: 30, borderTopRightRadius: 30 },
   warningIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: '#FCE8E6', alignItems: 'center', justifyContent: 'center' },
-  toastLayer: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 18, paddingBottom: 112 },
-  toast: { minHeight: 58, paddingHorizontal: 18, borderRadius: 22, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: colors.ink, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 18, elevation: 9 },
-  toastText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
 });

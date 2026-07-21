@@ -122,7 +122,7 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
   return (
     <Screen>
       <View style={styles.topbar}>
-        <View style={styles.avatar}>{profile?.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} /> : <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>}</View>
+        <View style={styles.avatar}>{profile?.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} /> : <Text style={[styles.avatarText, { backgroundColor: profile?.avatar_color ?? colors.orange }]}>{firstName.charAt(0).toUpperCase()}</Text>}</View>
         <View style={styles.greeting}><Text style={styles.hello}>Hola, {firstName}</Text><Text style={styles.date}>{date}</Text></View>
         <Pressable onPress={() => open('create')} style={styles.topAction}><Ionicons name="add" size={26} color={colors.ink} /></Pressable>
       </View>
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   topbar: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.orange, alignItems: 'center', justifyContent: 'center' },
   avatarImage: { width: 48, height: 48, borderRadius: 24 },
-  avatarText: { color: colors.ink, fontSize: 18, fontWeight: '800' },
+  avatarText: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden', color: colors.white, fontSize: 18, lineHeight: 48, textAlign: 'center', fontWeight: '800' },
   greeting: { flex: 1 },
   hello: { color: colors.ink, fontSize: 19, fontWeight: '700' },
   date: { color: colors.muted, fontSize: 14, marginTop: 2, textTransform: 'capitalize' },

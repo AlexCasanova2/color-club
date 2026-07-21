@@ -1,9 +1,15 @@
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
-import type { ActivityItem, Challenge, Club, ClubMember, DurationPreset, Friendship, Participant, Photo, Profile, RankingRow, Vote } from '@/types/domain';
+import type { ActivityItem, AppNotification, Challenge, Club, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, RankingRow, Vote } from '@/types/domain';
+
+function isJwtFutureError(error: { message: string } | null) {
+  return error?.message.toLowerCase().includes('jwt issued at future') ?? false;
+}
 
 function fail(error: { message: string } | null) {
-  if (error) throw new Error(error.message);
+  if (!error) return;
+  if (isJwtFutureError(error)) throw new Error('Tu sesión necesita actualizarse. Revisa que la hora del dispositivo esté en automático y vuelve a intentarlo.');
+  throw new Error(error.message);
 }
 
 export async function getClubs(): Promise<Club[]> {
@@ -13,12 +19,24 @@ export async function getClubs(): Promise<Club[]> {
 }
 
 export async function getHomeDashboard(userId: string): Promise<{ clubs: Club[]; profile: Profile; challenge: (Challenge & { club_name: string; is_accessible: boolean }) | null }> {
-  const [clubs, profileResult] = await Promise.all([
-    getClubs(),
+  const firstAttempt = await getHomeDashboardData(userId);
+  if (!firstAttempt.jwtFutureError) return firstAttempt.data;
+  await supabase.auth.refreshSession();
+  const secondAttempt = await getHomeDashboardData(userId);
+  if (secondAttempt.jwtFutureError) throw new Error('Tu sesión necesita actualizarse. Revisa que la hora del dispositivo esté en automático y vuelve a intentarlo.');
+  return secondAttempt.data;
+}
+
+async function getHomeDashboardData(userId: string): Promise<{ jwtFutureError: true; data?: never } | { jwtFutureError: false; data: { clubs: Club[]; profile: Profile; challenge: (Challenge & { club_name: string; is_accessible: boolean }) | null } }> {
+  const [clubsResult, profileResult] = await Promise.all([
+    supabase.from('clubs').select('*').order('created_at'),
     supabase.from('profiles').select('*').eq('id', userId).single(),
   ]);
+  if (isJwtFutureError(clubsResult.error) || isJwtFutureError(profileResult.error)) return { jwtFutureError: true };
+  fail(clubsResult.error);
   fail(profileResult.error);
-  if (!clubs.length) return { clubs, profile: profileResult.data as Profile, challenge: null };
+  const clubs = (clubsResult.data ?? []) as Club[];
+  if (!clubs.length) return { jwtFutureError: false, data: { clubs, profile: profileResult.data as Profile, challenge: null } };
   const challengeResult = await supabase
     .from('challenges')
     .select('*')
@@ -26,9 +44,10 @@ export async function getHomeDashboard(userId: string): Promise<{ clubs: Club[];
     .in('status', ['configuring', 'active', 'voting'])
     .order('created_at', { ascending: false })
     .limit(20);
+  if (isJwtFutureError(challengeResult.error)) return { jwtFutureError: true };
   fail(challengeResult.error);
   const challenges = (challengeResult.data ?? []) as Challenge[];
-  if (!challenges.length) return { clubs, profile: profileResult.data as Profile, challenge: null };
+  if (!challenges.length) return { jwtFutureError: false, data: { clubs, profile: profileResult.data as Profile, challenge: null } };
   const [participantResult, membershipResult] = await Promise.all([
     supabase
       .from('challenge_participants')
@@ -42,6 +61,7 @@ export async function getHomeDashboard(userId: string): Promise<{ clubs: Club[];
       .eq('user_id', userId)
       .eq('status', 'active'),
   ]);
+  if (isJwtFutureError(participantResult.error) || isJwtFutureError(membershipResult.error)) return { jwtFutureError: true };
   fail(participantResult.error);
   fail(membershipResult.error);
   const challengeAccess = challenges.map((item) => {
@@ -53,11 +73,11 @@ export async function getHomeDashboard(userId: string): Promise<{ clubs: Club[];
     };
   });
   const selected = challengeAccess.find((item) => item.isAccessible) ?? challengeAccess[0]!;
-  return {
+  return { jwtFutureError: false, data: {
     clubs,
     profile: profileResult.data as Profile,
     challenge: { ...selected.challenge, club_name: clubs.find((club) => club.id === selected.challenge.club_id)?.name ?? 'Tu club', is_accessible: selected.isAccessible },
-  };
+  } };
 }
 
 export async function getActivity(userId: string): Promise<ActivityItem[]> {
@@ -83,6 +103,32 @@ export async function getActivity(userId: string): Promise<ActivityItem[]> {
       participant_status: ownParticipation.status,
     } as ActivityItem;
   });
+}
+
+export async function getNotifications(userId: string): Promise<AppNotification[]> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  fail(error);
+  return (data ?? []) as AppNotification[];
+}
+
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('read_at', null);
+  fail(error);
+  return count ?? 0;
+}
+
+export async function markNotificationRead(notificationId: string) {
+  const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', notificationId);
+  fail(error);
 }
 
 export async function getFriendships(): Promise<Friendship[]> {
@@ -189,6 +235,22 @@ export async function getClubMembers(clubId: string): Promise<ClubMember[]> {
     .order('joined_at');
   fail(error);
   return (data ?? []) as unknown as ClubMember[];
+}
+
+export async function getClubMessages(clubId: string): Promise<ClubMessage[]> {
+  const { data, error } = await supabase
+    .from('club_messages')
+    .select('*, profiles!club_messages_sender_id_fkey(*)')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false })
+    .limit(30);
+  fail(error);
+  return ((data ?? []) as unknown as ClubMessage[]).reverse();
+}
+
+export async function sendClubMessage(clubId: string, senderId: string, body: string) {
+  const { error } = await supabase.from('club_messages').insert({ club_id: clubId, sender_id: senderId, body: body.trim() });
+  fail(error);
 }
 
 export async function updateClubName(clubId: string, name: string) {

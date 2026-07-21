@@ -12,6 +12,12 @@ export interface Profile {
   weekly_summary: boolean;
   allow_friend_requests: boolean;
   profile_discoverable: boolean;
+  bio: string;
+  favorite_color: string;
+  status_text: string;
+  preferred_photo_source: 'camera' | 'library';
+  avatar_color: string;
+  ranking_display_name: 'display_name' | 'username';
 }
 
 export interface Club {
@@ -30,6 +36,15 @@ export interface ClubMember {
   status: 'active' | 'left';
   role: 'member' | 'admin';
   joined_at: string;
+  profiles: Profile;
+}
+
+export interface ClubMessage {
+  id: string;
+  club_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
   profiles: Profile;
 }
 
@@ -81,6 +96,19 @@ export interface Vote {
   id: string;
   voter_id: string;
   voted_participant_id: string;
+}
+
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  type: 'challenge' | 'friend_request' | 'weekly_summary';
+  title: string;
+  body: string;
+  related_club_id: string | null;
+  related_challenge_id: string | null;
+  related_user_id: string | null;
+  read_at: string | null;
+  created_at: string;
 }
 
 export interface ActivityItem extends Challenge {

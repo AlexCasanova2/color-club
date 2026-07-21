@@ -66,10 +66,10 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted }: { clubId
     }, 'plain-text');
   }
 
-  if (loading || !club) return <Screen><Header title="Administrar" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /></Screen>;
+  if (loading || !club) return <Screen stickyHeader bottomInset={28}><Header title="Administrar" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /></Screen>;
 
   return (
-    <Screen>
+    <Screen stickyHeader bottomInset={28}>
       <Header title="Administrar" onBack={onBack} />
       <View style={styles.hero}>
         <View style={styles.heroIcon}><Ionicons color={colors.ink} name="settings-outline" size={26} /></View>
@@ -88,7 +88,7 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted }: { clubId
       <View style={styles.membersList}>
         {members.map((member) => (
           <View key={member.id} style={styles.memberRow}>
-            <View style={styles.avatar}><Text style={styles.initial}>{member.profiles.display_name.charAt(0).toUpperCase()}</Text></View>
+            <View style={styles.avatar}><Text style={[styles.initial, { backgroundColor: member.profiles.avatar_color ?? colors.ink }]}>{member.profiles.display_name.charAt(0).toUpperCase()}</Text></View>
             <View style={styles.memberCopy}>
               <Text style={styles.memberName}>{member.profiles.display_name}{member.user_id === userId ? ' (tú)' : ''}</Text>
               <Text style={styles.memberMeta}>@{member.profiles.username} · {member.role === 'admin' ? 'Admin' : 'Miembro'}</Text>
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   membersList: { gap: 10 },
   memberRow: { minHeight: 82, paddingHorizontal: 14, borderRadius: 24, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
-  initial: { color: colors.white, fontSize: 16, fontWeight: '900' },
+  initial: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', color: colors.white, fontSize: 16, lineHeight: 42, textAlign: 'center', fontWeight: '900' },
   memberCopy: { flex: 1 },
   memberName: { color: colors.ink, fontSize: 15, fontWeight: '800' },
   memberMeta: { color: colors.muted, fontSize: 11, marginTop: 3 },

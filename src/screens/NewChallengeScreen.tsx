@@ -83,7 +83,7 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
   }
 
   return (
-    <Screen>
+    <Screen stickyHeader bottomInset={28}>
       <Header title="Nuevo reto" onBack={onBack} />
       <View style={styles.heading}><Eyebrow>Configuración</Eyebrow><Title>Elige las reglas</Title><Body muted>Elige un color, usa shuffle para color común aleatorio o ? para color único por persona.</Body></View>
       <Text style={styles.label}>Color del reto</Text><View style={styles.palette}>

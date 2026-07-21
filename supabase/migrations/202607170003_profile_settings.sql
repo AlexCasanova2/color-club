@@ -70,6 +70,7 @@ begin
   insert into public.friendships (requester_id, addressee_id)
   values (auth.uid(), target_user_id)
   returning id into friendship_id;
+
   return friendship_id;
 end;
 $$;

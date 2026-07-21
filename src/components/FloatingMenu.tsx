@@ -12,7 +12,7 @@ const tabs: Array<{ id: MenuTab; label: string; icon: keyof typeof Ionicons.glyp
   { id: 'account', label: 'Cuenta', icon: 'person-outline', selectedIcon: 'person' },
 ];
 
-export function FloatingMenu({ active, onSelect }: { active: MenuTab; onSelect: (tab: MenuTab) => void }) {
+export function FloatingMenu({ active, onSelect, notificationCount = 0 }: { active: MenuTab; onSelect: (tab: MenuTab) => void; notificationCount?: number }) {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [menuWidth, setMenuWidth] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
@@ -61,6 +61,7 @@ export function FloatingMenu({ active, onSelect }: { active: MenuTab; onSelect: 
               style={({ pressed }) => [styles.item, pressed && styles.pressed]}
             >
               <Ionicons color={selected ? colors.ink : colors.white} name={selected ? tab.selectedIcon : tab.icon} size={20} />
+              {tab.id === 'activity' && notificationCount > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{notificationCount > 9 ? '9+' : notificationCount}</Text></View>}
               <Text style={[styles.label, selected && styles.labelSelected]}>{tab.label}</Text>
             </Pressable>
           );
@@ -85,6 +86,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   item: { flex: 1, borderRadius: 24, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  badge: { position: 'absolute', top: 7, right: 22, minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 9, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.ink },
+  badgeText: { color: colors.white, fontSize: 9, fontWeight: '900' },
   selection: { position: 'absolute', left: 6, top: 6, bottom: 6, borderRadius: 24, backgroundColor: colors.white },
   pressed: { opacity: 0.65 },
   label: { color: colors.white, fontSize: 10, lineHeight: 13, fontWeight: '600' },

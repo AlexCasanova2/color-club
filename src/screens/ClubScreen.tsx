@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { ToastBubble, ToastOverlay } from '@/components/Toast';
 import { Body, Button, Card, ErrorText, Field, Header, Screen, Title } from '@/components/ui';
 import { getClub, getClubMembers, getFriendships, inviteUserToClub } from '@/lib/api';
 import { colors } from '@/lib/theme';
@@ -16,13 +17,14 @@ function countdown(date: string) {
 
 const statusLabel = { configuring: 'Programado', active: 'En juego', voting: 'Votación', closed: 'Resultados' };
 
-export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge, onManage }: {
+export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge, onManage, onChat }: {
   clubId: string;
   userId: string;
   onBack: () => void;
   onChallenge: (id: string) => void;
   onNewChallenge: () => void;
   onManage: () => void;
+  onChat: () => void;
 }) {
   const [club, setClub] = useState<Club | null>(null);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
@@ -37,6 +39,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   const [error, setError] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastKey, setToastKey] = useState(0);
   const [invitedFriendIds, setInvitedFriendIds] = useState<string[]>([]);
   const [memberUserIds, setMemberUserIds] = useState<string[]>([]);
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -75,7 +78,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
 
   function showToast(text: string) {
     setToast(text);
-    setTimeout(() => setToast(null), 1500);
+    setToastKey((current) => current + 1);
   }
 
   async function copyCode() {
@@ -129,9 +132,9 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
       </View>
 
       <View style={styles.actionsRow}>
-        <Pressable onPress={copyCode} style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]}>
-          <View style={styles.actionIcon}><Ionicons color={colors.ink} name="copy-outline" size={20} /></View>
-          <View style={styles.actionText}><Text style={styles.actionTitle}>Código</Text><Text style={styles.actionMeta}>{club.invite_code}</Text></View>
+        <Pressable onPress={onChat} style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]}>
+          <View style={styles.actionIcon}><Ionicons color={colors.ink} name="chatbubbles-outline" size={20} /></View>
+          <View style={styles.actionText}><Text style={styles.actionTitle}>Chat</Text><Text style={styles.actionMeta}>Hablar con el grupo</Text></View>
         </Pressable>
         <Pressable onPress={openInvite} style={({ pressed }) => [styles.actionCard, styles.inviteCard, pressed && styles.pressed]}>
           <View style={styles.actionIcon}><Ionicons color={colors.ink} name="person-add-outline" size={20} /></View>
@@ -196,6 +199,10 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
                   <View style={styles.sheetIcon}><Ionicons color={colors.ink} name="people-outline" size={25} /></View>
                   <View style={styles.sheetTitleWrap}><Text style={styles.sheetKicker}>Invitar al grupo</Text><Text style={styles.sheetTitle}>{club.name}</Text></View>
                 </View>
+                <Pressable onPress={copyCode} style={({ pressed }) => [styles.inviteCodeCard, pressed && styles.pressed]}>
+                  <View><Text style={styles.inviteCodeLabel}>Código del grupo</Text><Text style={styles.inviteCode}>{club.invite_code}</Text></View>
+                  <View style={styles.inviteCodeIcon}><Ionicons color={colors.ink} name="copy-outline" size={19} /></View>
+                </Pressable>
                 <Field label="Usuario o código" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} placeholder="@usuario o CC-A1B2C3D4E5F6" />
                 <Button label="Invitar por identificador" onPress={() => void invite(identifier)} loading={inviting} disabled={!identifier.trim()} />
                 <ErrorText message={inviteError} />
@@ -205,7 +212,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
                     const alreadyMember = memberUserIds.includes(friend.id);
                     const invited = alreadyMember || invitedFriendIds.includes(friend.id);
                     return <Pressable key={friend.id} disabled={invited} onPress={() => void invite(friend.username, friend.id)} style={({ pressed }) => [styles.friendRow, invited && styles.friendInvited, pressed && styles.pressed]}>
-                      <View style={styles.friendAvatar}>{friend.avatar_url ? <Image source={{ uri: friend.avatar_url }} style={styles.friendImage} /> : <Text style={styles.friendInitial}>{friend.display_name.charAt(0).toUpperCase()}</Text>}</View>
+                      <View style={styles.friendAvatar}>{friend.avatar_url ? <Image source={{ uri: friend.avatar_url }} style={styles.friendImage} /> : <Text style={[styles.friendInitial, { backgroundColor: friend.avatar_color ?? colors.ink }]}>{friend.display_name.charAt(0).toUpperCase()}</Text>}</View>
                       <View style={styles.friendCopy}><Text style={styles.friendName}>{friend.display_name}</Text><Text style={styles.friendUsername}>{alreadyMember ? 'Ya está en el grupo' : invited ? 'Invitado' : `@${friend.username}`}</Text></View>
                       <View style={[styles.inviteStatus, invited && styles.inviteStatusDone]}><Ionicons color={colors.ink} name={invited ? 'checkmark' : 'add'} size={18} /></View>
                     </Pressable>;
@@ -213,14 +220,13 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
                 </View>
                 <Button label="Cerrar" onPress={closeInvite} variant="quiet" />
               </ScrollView>
+              <ToastBubble message={toast} onHidden={() => setToast(null)} trigger={toastKey} compact style={styles.sheetToast} />
             </Animated.View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
 
-      <Modal animationType="fade" transparent visible={toast !== null}>
-        <View pointerEvents="none" style={styles.toastLayer}><View style={styles.toast}><Ionicons color={colors.ink} name="checkmark-circle" size={20} /><Text style={styles.toastText}>{toast}</Text></View></View>
-      </Modal>
+      {!inviteOpen && <ToastOverlay message={toast} onHidden={() => setToast(null)} trigger={toastKey} />}
     </Screen>
   );
 }
@@ -275,19 +281,21 @@ const styles = StyleSheet.create({
   sheetTitleWrap: { flex: 1 },
   sheetKicker: { color: colors.ink, fontSize: 12, fontWeight: '700', opacity: 0.65, marginBottom: 4 },
   sheetTitle: { color: colors.ink, fontSize: 24, lineHeight: 27, fontWeight: '900' },
+  inviteCodeCard: { minHeight: 76, paddingHorizontal: 16, borderRadius: 24, backgroundColor: colors.green, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  inviteCodeLabel: { color: colors.ink, opacity: 0.65, fontSize: 12, fontWeight: '800', marginBottom: 4 },
+  inviteCode: { color: colors.ink, fontSize: 22, fontWeight: '900', letterSpacing: 1 },
+  inviteCodeIcon: { width: 42, height: 42, borderRadius: 16, backgroundColor: '#FFFFFF88', alignItems: 'center', justifyContent: 'center' },
   friendSection: { color: colors.ink, fontSize: 18, fontWeight: '900', marginTop: 6 },
   friendList: { gap: 8 },
   friendRow: { minHeight: 70, paddingHorizontal: 14, borderRadius: 22, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', gap: 12 },
   friendInvited: { backgroundColor: colors.green },
   friendAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
   friendImage: { width: 42, height: 42, borderRadius: 21 },
-  friendInitial: { color: colors.white, fontSize: 16, fontWeight: '800' },
+  friendInitial: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', color: colors.white, fontSize: 16, lineHeight: 42, textAlign: 'center', fontWeight: '800' },
   friendCopy: { flex: 1 },
   friendName: { color: colors.ink, fontWeight: '800', fontSize: 15 },
   friendUsername: { color: colors.muted, fontSize: 12 },
   inviteStatus: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   inviteStatusDone: { backgroundColor: colors.white },
-  toastLayer: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 18, paddingBottom: 112 },
-  toast: { minHeight: 58, paddingHorizontal: 18, borderRadius: 22, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: colors.ink, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 18, elevation: 9 },
-  toastText: { color: colors.ink, fontSize: 14, fontWeight: '700' },
+  sheetToast: { position: 'absolute', left: 18, right: 18, bottom: 18 },
 });

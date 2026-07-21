@@ -1,26 +1,30 @@
 # Color Club
 
-MVP móvil de retos fotográficos para clubs de amigos. Está construido con Expo, React Native y Supabase.
+Color Club es una app móvil social de retos fotográficos por color. Está construida con Expo, React Native y Supabase.
 
-## Incluido
+## Funcionalidades
 
-- Registro e inicio de sesión con email y contraseña.
-- Creación de clubs, código de invitación y temporadas manuales o mensuales.
-- Amigos mediante `@username` o código público, con solicitudes privadas.
-- Reto de color compartido con presets de 24 h, 48 h y una semana.
-- Collage editable de seis fotos hasta el envío definitivo.
-- Espera en tiempo real, descalificación al vencer el plazo y votación única.
-- Resultados no anónimos y ranking de temporada calculado con empates literales.
-- Esquema PostgreSQL, Storage privado, funciones transaccionales y políticas RLS.
+- Autenticación con email y contraseña, registro y recuperación de contraseña.
+- Clubs privados con código de invitación, amigos por `@username` o código público y solicitudes privadas.
+- Retos de color con color fijo, color aleatorio compartido o color aleatorio individual por participante.
+- Selector de duración y número de fotos por reto.
+- CTA de lanzamiento con mantener pulsado, haptics y animación de progreso.
+- Collage editable, envío definitivo, votación única y ranking por temporada.
+- Reglas de participación para evitar entradas tardías a retos ya creados.
+- Chat privado por club con Realtime, avatares y composer adaptado al teclado.
+- Perfil editable con foto, bio, color favorito, estado, color de avatar y nombre de ranking.
+- Notificaciones in-app para retos, solicitudes de amistad y resumen semanal.
+- Navegación con dock flotante, header tipo Dynamic Island y transiciones entre rutas.
+- Toasts reutilizables con barra de progreso que completa el ancho real del contenedor.
+- Esquema PostgreSQL con RLS, Storage privado, funciones transaccionales y Realtime.
 
-## Puesta en marcha
+## Puesta En Marcha
 
 1. Crea un proyecto en [Supabase](https://supabase.com).
-2. Ejecuta en orden los archivos de `supabase/migrations/` desde el SQL Editor o enlaza el proyecto con la CLI y usa `supabase db push`.
-3. Activa Realtime para las tablas `challenges` y `challenge_participants` si la publicación no se creó durante la migración.
-4. Activa `pg_cron` y programa las dos consultas indicadas al final de la migración para transiciones automáticas.
-5. Crea `.env` a partir de `.env.example` con la URL y la clave anon del proyecto.
-6. Ejecuta `npm install` y `npm start`.
+2. Ejecuta en orden todos los archivos de `supabase/migrations/` desde el SQL Editor o enlaza el proyecto con la CLI y usa `supabase db push`.
+3. Crea `.env` a partir de `.env.example` con la URL y la clave anon del proyecto.
+4. Ejecuta `npm install`.
+5. Ejecuta `npm start`.
 
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://TU-PROYECTO.supabase.co
@@ -29,15 +33,45 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=TU_CLAVE_ANON
 
 Para abrir iOS o Android usa `npm run ios` o `npm run android`. La cámara requiere un dispositivo físico; la galería funciona también en simulador.
 
+## Supabase
+
+Las migraciones configuran tablas, RLS, Storage, funciones RPC y Realtime para clubs, amistades, retos, fotos, votaciones, chat y notificaciones.
+
+Activa o revisa Realtime para estas tablas si tu proyecto no lo habilita automáticamente desde las migraciones:
+
+- `challenges`
+- `challenge_participants`
+- `club_messages`
+- `notifications`
+
 ## Automatizaciones
 
-Las funciones `advance_challenges()` y `reset_monthly_seasons()` están revocadas para clientes. Deben ejecutarse como jobs internos mediante Supabase Cron. La primera:
+Las funciones internas no están disponibles para clientes y deben ejecutarse como jobs de Supabase Scheduler/Cron cuando quieras automatización completa.
 
-- Activa retos programados.
-- Descalifica collages incompletos cuando vence el plazo.
-- Abre una votación de 24 horas.
-- Cierra votaciones vencidas.
+- `advance_challenges()` activa retos programados, descalifica collages incompletos, abre votaciones y cierra votaciones vencidas.
+- `reset_monthly_seasons()` reinicia temporadas mensuales si se usa esa configuración.
+- `create_weekly_summary_notifications()` genera notificaciones de resumen semanal para usuarios que tengan esa preferencia activa.
 
 ## Seguridad
 
-El bucket `collages` es privado. La política de Storage delega en la política RLS de `photos`, por lo que cada participante solo puede acceder a sus propias fotos durante el reto. El club obtiene acceso al entrar en fase de votación. Los votos se validan también mediante trigger para impedir auto-votos, votos de descalificados y objetivos inválidos.
+El bucket `collages` es privado. La política de Storage delega en la política RLS de `photos`, por lo que cada participante solo puede acceder a sus propias fotos durante el reto. El club obtiene acceso al entrar en fase de votación.
+
+Los votos se validan mediante trigger para impedir auto-votos, votos de descalificados y objetivos inválidos. Las tablas de chat, amistades, miembros y notificaciones también usan RLS para limitar lectura y escritura al usuario o club correspondiente.
+
+## Scripts
+
+- `npm start`: inicia Expo.
+- `npm run ios`: abre Expo en iOS.
+- `npm run android`: abre Expo en Android.
+- `npm run web`: abre Expo en web.
+- `npm run typecheck`: ejecuta TypeScript sin emitir archivos.
+
+## Validación Recomendada
+
+Antes de subir cambios ejecuta:
+
+```sh
+npm run typecheck
+npx expo-doctor
+git diff --check
+```

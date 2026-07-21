@@ -8,7 +8,7 @@ import type { Friendship, Profile } from '@/types/domain';
 function Identity({ profile }: { profile: Profile }) {
   return (
     <>
-      <View style={styles.avatar}>{profile.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} /> : <Text style={styles.initial}>{profile.display_name.charAt(0).toUpperCase()}</Text>}</View>
+      <View style={styles.avatar}>{profile.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} /> : <Text style={[styles.initial, { backgroundColor: profile.avatar_color ?? colors.ink }]}>{profile.display_name.charAt(0).toUpperCase()}</Text>}</View>
       <View style={styles.identity}>
         <Text style={styles.name}>{profile.display_name}</Text>
         <Text style={styles.username}>@{profile.username}</Text>
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.65 },
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
   avatarImage: { width: 42, height: 42, borderRadius: 21 },
-  initial: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  initial: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', color: colors.white, fontSize: 16, lineHeight: 42, textAlign: 'center', fontWeight: '600' },
   identity: { flex: 1, gap: 2 },
   name: { color: colors.ink, fontSize: 16, fontWeight: '800' },
   username: { color: colors.ink, opacity: 0.65, fontSize: 12 },

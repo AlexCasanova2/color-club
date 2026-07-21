@@ -16,22 +16,23 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/lib/theme';
 
-export function Screen({ children, scroll = true }: PropsWithChildren<{ scroll?: boolean }>) {
+export function Screen({ children, scroll = true, bottomInset = 112, stickyHeader = false }: PropsWithChildren<{ scroll?: boolean; bottomInset?: number; stickyHeader?: boolean }>) {
   return (
     <View style={styles.safe}>
       <SafeAreaView style={styles.topSafe} />
       {scroll ? (
         <ScrollView
           automaticallyAdjustKeyboardInsets
-          contentContainerStyle={styles.screen}
+          contentContainerStyle={[styles.screen, { paddingBottom: bottomInset }]}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={stickyHeader ? [0] : undefined}
         >
           {children}
         </ScrollView>
-      ) : <View style={styles.screen}>{children}</View>}
+      ) : <View style={[styles.screen, styles.fixedScreen, { paddingBottom: bottomInset }]}>{children}</View>}
     </View>
   );
 }
@@ -135,7 +136,8 @@ export function SkeletonBlock({ style }: { style?: ViewStyle }) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.paper },
   topSafe: { backgroundColor: colors.paper },
-  screen: { flexGrow: 1, paddingHorizontal: 18, paddingBottom: 112 },
+  screen: { flexGrow: 1, paddingHorizontal: 18 },
+  fixedScreen: { flex: 1 },
   eyebrow: { color: colors.muted, fontSize: 13, fontWeight: '500', marginBottom: 7 },
   title: { color: colors.ink, fontSize: 40, lineHeight: 43, fontWeight: '800', letterSpacing: -1.5 },
   titleMedium: { fontSize: 27, lineHeight: 31, letterSpacing: -0.8 },
