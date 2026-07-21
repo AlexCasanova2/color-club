@@ -23,7 +23,7 @@ on:
       wait:
         description: Wait for build to finish
         required: true
-        default: false
+        default: true
         type: boolean
       submit_to_testflight:
         description: Submit iOS production build to TestFlight
@@ -61,13 +61,15 @@ jobs:
       - name: Start EAS build
         run: |
           BUILD_ARGS=(--platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive)
-
-          if [ "${{ inputs.wait }}" != "true" ]; then
-            BUILD_ARGS+=(--no-wait)
-          fi
+          SHOULD_SUBMIT="false"
 
           if [ "${{ inputs.submit_to_testflight }}" = "true" ] && [ "${{ inputs.platform }}" = "ios" ] && [ "${{ inputs.profile }}" = "production" ]; then
+            SHOULD_SUBMIT="true"
             BUILD_ARGS+=(--auto-submit-with-profile production)
+          fi
+
+          if [ "${{ inputs.wait }}" != "true" ] && [ "$SHOULD_SUBMIT" != "true" ]; then
+            BUILD_ARGS+=(--no-wait)
           fi
 
           eas build "${BUILD_ARGS[@]}"
