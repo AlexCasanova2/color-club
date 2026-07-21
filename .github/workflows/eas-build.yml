@@ -25,6 +25,16 @@ on:
         required: true
         default: false
         type: boolean
+      submit_to_testflight:
+        description: Submit iOS production build to TestFlight
+        required: true
+        default: true
+        type: boolean
+      what_to_test:
+        description: TestFlight notes
+        required: false
+        default: Color Club beta build.
+        type: string
 
 jobs:
   build:
@@ -55,8 +65,14 @@ jobs:
 
       - name: Start EAS build
         run: |
-          if [ "${{ inputs.wait }}" = "true" ]; then
-            eas build --platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive
-          else
-            eas build --platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive --no-wait
+          BUILD_ARGS=(--platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive)
+
+          if [ "${{ inputs.wait }}" != "true" ]; then
+            BUILD_ARGS+=(--no-wait)
           fi
+
+          if [ "${{ inputs.submit_to_testflight }}" = "true" ] && [ "${{ inputs.platform }}" = "ios" ] && [ "${{ inputs.profile }}" = "production" ]; then
+            BUILD_ARGS+=(--auto-submit-with-profile production --what-to-test "${{ inputs.what_to_test }}")
+          fi
+
+          eas build "${BUILD_ARGS[@]}"
