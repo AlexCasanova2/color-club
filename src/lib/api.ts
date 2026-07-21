@@ -179,7 +179,7 @@ export async function inviteUserToClub(clubId: string, identifier: string) {
   fail(error);
 }
 
-export async function getClub(clubId: string, userId?: string): Promise<{ club: Club; challenge: Challenge | null; seasonId: string; ranking: RankingRow[]; myChallengeColor: string | null; isChallengeParticipant: boolean }> {
+export async function getClub(clubId: string, userId?: string): Promise<{ club: Club; challenge: Challenge | null; seasonId: string; ranking: RankingRow[]; myChallengeColor: string | null; myChallengeStatus: Participant['status'] | null; isChallengeParticipant: boolean; submittedCount: number; participantCount: number }> {
   const [clubResult, challengeResult, seasonResult] = await Promise.all([
     supabase.from('clubs').select('*').eq('id', clubId).single(),
     supabase.from('challenges').select('*').eq('club_id', clubId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
@@ -192,13 +192,16 @@ export async function getClub(clubId: string, userId?: string): Promise<{ club: 
   const rankingResult = await supabase.from('season_ranking').select('*').eq('season_id', seasonId).order('position');
   fail(rankingResult.error);
   let myChallengeColor: string | null = null;
+  let myChallengeStatus: Participant['status'] | null = null;
   let isChallengeParticipant = false;
+  let submittedCount = 0;
+  let participantCount = 0;
   const challenge = challengeResult.data as Challenge | null;
   if (challenge && userId) {
-    const [participantResult, membershipResult] = await Promise.all([
+    const [participantResult, membershipResult, participantsResult] = await Promise.all([
       supabase
         .from('challenge_participants')
-        .select('assigned_color')
+        .select('assigned_color,status')
         .eq('challenge_id', challenge.id)
         .eq('user_id', userId)
         .maybeSingle(),
@@ -209,12 +212,21 @@ export async function getClub(clubId: string, userId?: string): Promise<{ club: 
         .eq('user_id', userId)
         .eq('status', 'active')
         .maybeSingle(),
+      supabase
+        .from('challenge_participants')
+        .select('status')
+        .eq('challenge_id', challenge.id),
     ]);
     fail(participantResult.error);
     fail(membershipResult.error);
+    fail(participantsResult.error);
     const joinedBeforeChallenge = membershipResult.data?.joined_at ? new Date(membershipResult.data.joined_at).getTime() <= new Date(challenge.created_at).getTime() : false;
     isChallengeParticipant = Boolean(participantResult.data) && joinedBeforeChallenge;
     myChallengeColor = isChallengeParticipant ? participantResult.data?.assigned_color ?? null : null;
+    myChallengeStatus = isChallengeParticipant ? (participantResult.data?.status as Participant['status'] | undefined) ?? null : null;
+    const challengeParticipants = (participantsResult.data ?? []) as Array<{ status: Participant['status'] }>;
+    participantCount = challengeParticipants.length;
+    submittedCount = challengeParticipants.filter((participant) => participant.status === 'submitted').length;
   }
   return {
     club: clubResult.data as Club,
@@ -222,7 +234,10 @@ export async function getClub(clubId: string, userId?: string): Promise<{ club: 
     seasonId,
     ranking: (rankingResult.data ?? []) as RankingRow[],
     myChallengeColor,
+    myChallengeStatus,
     isChallengeParticipant,
+    submittedCount,
+    participantCount,
   };
 }
 
@@ -387,6 +402,11 @@ export async function getChallenge(challengeId: string, userId: string) {
     votes: (votesResult.data ?? []) as Vote[],
     votedParticipantId: ((votesResult.data ?? []).find((vote) => vote.voter_id === userId)?.voted_participant_id as string | undefined) ?? null,
   };
+}
+
+export async function advanceChallenge(challengeId: string) {
+  const { error } = await supabase.rpc('advance_challenge', { target_challenge_id: challengeId });
+  fail(error);
 }
 
 export async function uploadPhoto(participantId: string, slot: number, uri: string) {

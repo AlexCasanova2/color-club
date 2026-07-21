@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Body, Button, ErrorText, Field, Screen, SkeletonBlock, Title } from '@/components/ui';
-import { createClub, getHomeDashboard, joinClub } from '@/lib/api';
+import { advanceChallenge, createClub, getHomeDashboard, joinClub } from '@/lib/api';
 import { colors } from '@/lib/theme';
 import type { Challenge, Club, Profile } from '@/types/domain';
 
@@ -20,7 +20,9 @@ let cachedDashboard: HomeDashboard | null = null;
 function timeLeft(date: string) {
   const milliseconds = Math.max(0, new Date(date).getTime() - Date.now());
   const hours = Math.floor(milliseconds / 3_600_000);
-  return hours > 48 ? `${Math.ceil(hours / 24)} días` : `${hours} h`;
+  const minutes = Math.floor((milliseconds % 3_600_000) / 60_000);
+  const seconds = Math.floor((milliseconds % 60_000) / 1000);
+  return hours > 48 ? `${Math.ceil(hours / 24)} días` : `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
 }
 
 function HomeSkeleton() {
@@ -44,8 +46,10 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
   const [monthly, setMonthly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clockTick, setClockTick] = useState(Date.now());
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(420)).current;
+  const advancedDeadline = useRef<string | null>(null);
 
   async function load(showSpinner = false) {
     if (showSpinner) setLoading(true);
@@ -60,6 +64,21 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
   }
 
   useEffect(() => { void load(!cachedDashboard || cachedDashboard.userId !== userId); }, [userId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setClockTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!challenge || !['active', 'configuring', 'voting'].includes(challenge.status)) return;
+    const deadline = challenge.status === 'voting' ? challenge.voting_ends_at : challenge.ends_at;
+    if (!deadline || new Date(deadline).getTime() > clockTick) return;
+    const deadlineKey = `${challenge.id}:${challenge.status}:${deadline}`;
+    if (advancedDeadline.current === deadlineKey) return;
+    advancedDeadline.current = deadlineKey;
+    void advanceChallenge(challenge.id).finally(() => load(false));
+  }, [challenge?.id, challenge?.status, challenge?.ends_at, challenge?.voting_ends_at, clockTick]);
 
   useEffect(() => {
     if (!modal) return;

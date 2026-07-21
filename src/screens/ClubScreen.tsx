@@ -4,15 +4,17 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { ToastBubble, ToastOverlay } from '@/components/Toast';
 import { Body, Button, Card, ErrorText, Field, Header, Screen, Title } from '@/components/ui';
-import { getClub, getClubMembers, getFriendships, getMyClubMembership, inviteUserToClub } from '@/lib/api';
+import { advanceChallenge, getClub, getClubMembers, getFriendships, getMyClubMembership, inviteUserToClub } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import type { Challenge, Club, ClubMember, Friendship, Profile, RankingRow } from '@/types/domain';
+import type { Challenge, Club, ClubMember, Friendship, Participant, Profile, RankingRow } from '@/types/domain';
 
 function countdown(date: string) {
   const milliseconds = Math.max(0, new Date(date).getTime() - Date.now());
   const hours = Math.floor(milliseconds / 3_600_000);
   const minutes = Math.floor((milliseconds % 3_600_000) / 60_000);
-  return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  const seconds = Math.floor((milliseconds % 60_000) / 1000);
+  return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
 }
 
 const statusLabel = { configuring: 'Programado', active: 'En juego', voting: 'Votación', closed: 'Resultados' };
@@ -29,7 +31,10 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   const [club, setClub] = useState<Club | null>(null);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [myChallengeColor, setMyChallengeColor] = useState<string | null>(null);
+  const [myChallengeStatus, setMyChallengeStatus] = useState<Participant['status'] | null>(null);
   const [isChallengeParticipant, setIsChallengeParticipant] = useState(false);
+  const [submittedCount, setSubmittedCount] = useState(0);
+  const [participantCount, setParticipantCount] = useState(0);
   const [ranking, setRanking] = useState<RankingRow[]>([]);
   const [friends, setFriends] = useState<Profile[]>([]);
   const [membership, setMembership] = useState<ClubMember | null>(null);
@@ -43,8 +48,10 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   const [toastKey, setToastKey] = useState(0);
   const [invitedFriendIds, setInvitedFriendIds] = useState<string[]>([]);
   const [memberUserIds, setMemberUserIds] = useState<string[]>([]);
+  const [clockTick, setClockTick] = useState(Date.now());
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(420)).current;
+  const advancedDeadline = useRef<string | null>(null);
 
   async function load() {
     try {
@@ -54,12 +61,39 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
       setChallenge(data.challenge);
       setRanking(data.ranking);
       setMyChallengeColor(data.myChallengeColor);
+      setMyChallengeStatus(data.myChallengeStatus);
       setIsChallengeParticipant(data.isChallengeParticipant);
+      setSubmittedCount(data.submittedCount);
+      setParticipantCount(data.participantCount);
     } catch (caught) { setError((caught as Error).message); }
     setLoading(false);
   }
 
   useEffect(() => { void load(); }, [clubId]);
+
+  useEffect(() => {
+    if (!challenge) return;
+    const channel = supabase.channel(`club-challenge-${challenge.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'challenge_participants', filter: `challenge_id=eq.${challenge.id}` }, () => void load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'challenges', filter: `id=eq.${challenge.id}` }, () => void load())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [challenge?.id]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setClockTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!challenge || !['active', 'configuring', 'voting'].includes(challenge.status)) return;
+    const deadline = challenge.status === 'voting' ? challenge.voting_ends_at : challenge.ends_at;
+    if (!deadline || new Date(deadline).getTime() > clockTick) return;
+    const deadlineKey = `${challenge.id}:${challenge.status}:${deadline}`;
+    if (advancedDeadline.current === deadlineKey) return;
+    advancedDeadline.current = deadlineKey;
+    void advanceChallenge(challenge.id).finally(() => load());
+  }, [challenge?.id, challenge?.status, challenge?.ends_at, challenge?.voting_ends_at, clockTick]);
 
   useEffect(() => {
     if (!inviteOpen) return;
@@ -121,6 +155,13 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   const challengeColor = challenge?.shared_color ?? myChallengeColor ?? colors.line;
   const canOpenChallenge = !challenge || challenge.status === 'closed' || isChallengeParticipant;
   const canCreateChallenge = club.admin_id === userId || membership?.role === 'admin' || club.challenge_creation_policy === 'all_members' || (club.challenge_creation_policy === 'admins_moderators' && membership?.role === 'moderator');
+  const challengeExpired = challenge ? new Date(challenge.ends_at).getTime() <= clockTick : false;
+  const everyoneSubmitted = participantCount > 0 && submittedCount >= participantCount;
+  const isWaitingForOthers = challenge?.status === 'active' && myChallengeStatus === 'submitted' && !everyoneSubmitted && !challengeExpired;
+  const isWaitingForVoting = challenge?.status === 'active' && myChallengeStatus === 'submitted' && (everyoneSubmitted || challengeExpired);
+  const challengeTitle = !canOpenChallenge ? 'Reto ya en curso' : challenge?.status === 'voting' ? 'Elige el mejor collage' : isWaitingForVoting ? 'Todo listo' : isWaitingForOthers ? 'Esperando al resto' : 'Encuentra este color';
+  const challengeTimer = !canOpenChallenge ? 'Podrás participar en el siguiente reto' : isWaitingForVoting ? '0h 00m 00s' : challenge?.status === 'active' ? countdown(challenge.ends_at) : 'Abrir reto →';
+  const showWaitingSwatch = isWaitingForOthers || isWaitingForVoting;
 
   return (
     <Screen>
@@ -164,10 +205,12 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
         <Pressable disabled={!canOpenChallenge} onPress={() => onChallenge(challenge.id)} style={({ pressed }) => [styles.challenge, !canOpenChallenge && styles.lockedChallenge, pressed && styles.pressed]}>
           <View style={styles.challengeCopy}>
             <Text style={styles.status}>{statusLabel[challenge.status]}</Text>
-            <Text style={styles.challengeTitle}>{!canOpenChallenge ? 'Reto ya en curso' : challenge.status === 'voting' ? 'Elige el mejor collage' : 'Encuentra este color'}</Text>
-            <Text style={styles.timer}>{!canOpenChallenge ? 'Podrás participar en el siguiente reto' : challenge.status === 'active' ? countdown(challenge.ends_at) : 'Abrir reto →'}</Text>
+            <Text style={styles.challengeTitle}>{challengeTitle}</Text>
+            <Text style={styles.timer}>{challengeTimer}</Text>
           </View>
-          <View style={[styles.swatch, { backgroundColor: challengeColor }]} />
+          <View style={[styles.swatch, { backgroundColor: showWaitingSwatch ? colors.green : challengeColor }]}>
+            {showWaitingSwatch && <Ionicons color={colors.ink} name={isWaitingForVoting ? 'hourglass-outline' : 'checkmark'} size={27} />}
+          </View>
         </Pressable>
       ) : canCreateChallenge ? (
         <Pressable onPress={onNewChallenge} style={({ pressed }) => [styles.emptyChallenge, pressed && styles.pressed]}>
@@ -264,7 +307,7 @@ const styles = StyleSheet.create({
   status: { color: colors.ink, fontSize: 12, fontWeight: '800' },
   timer: { color: colors.ink, fontWeight: '800', marginTop: 15 },
   challengeTitle: { color: colors.ink, fontSize: 30, lineHeight: 33, fontWeight: '900', maxWidth: 230 },
-  swatch: { width: 64, height: 64, borderRadius: 22, borderWidth: 6, borderColor: '#FFFFFF88', alignSelf: 'flex-end' },
+  swatch: { width: 64, height: 64, borderRadius: 22, borderWidth: 6, borderColor: '#FFFFFF88', alignSelf: 'flex-end', alignItems: 'center', justifyContent: 'center' },
   emptyChallenge: { minHeight: 170, padding: 22, borderRadius: 28, backgroundColor: colors.orange, gap: 9, justifyContent: 'center', marginBottom: 16 },
   emptyChallengeTitle: { color: colors.ink, fontSize: 24, fontWeight: '900' },
   pressed: { opacity: 0.72 },

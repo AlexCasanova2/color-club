@@ -5,7 +5,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { ActivityIndicator, Alert, Image, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Body, Button, Card, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
-import { castVote, deletePhoto, getChallenge, submitCollage, uploadPhoto } from '@/lib/api';
+import { advanceChallenge, castVote, deletePhoto, getChallenge, submitCollage, uploadPhoto } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Challenge, Participant, Vote } from '@/types/domain';
@@ -16,7 +16,8 @@ function remaining(date: string) {
   const ms = Math.max(0, new Date(date).getTime() - Date.now());
   const hours = Math.floor(ms / 3_600_000);
   const minutes = Math.floor((ms % 3_600_000) / 60_000);
-  return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  const seconds = Math.floor((ms % 60_000) / 1000);
+  return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
 }
 
 function readableTextColor(hex: string) {
@@ -57,7 +58,9 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   const [cropImageSize, setCropImageSize] = useState({ width: 0, height: 0 });
   const [cropFrameSize, setCropFrameSize] = useState({ width: 0, height: 0 });
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const [clockTick, setClockTick] = useState(Date.now());
   const cropStart = useRef({ x: 0, y: 0 });
+  const advancedDeadline = useRef<string | null>(null);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -80,6 +83,21 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [challengeId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setClockTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!challenge || !['active', 'configuring', 'voting'].includes(challenge.status)) return;
+    const deadline = challenge.status === 'voting' ? challenge.voting_ends_at : challenge.ends_at;
+    if (!deadline || new Date(deadline).getTime() > clockTick) return;
+    const deadlineKey = `${challenge.id}:${challenge.status}:${deadline}`;
+    if (advancedDeadline.current === deadlineKey) return;
+    advancedDeadline.current = deadlineKey;
+    void advanceChallenge(challenge.id).finally(() => load(true));
+  }, [challenge?.id, challenge?.status, challenge?.ends_at, challenge?.voting_ends_at, clockTick]);
 
   const me = participants.find((participant) => participant.user_id === userId);
   const targetColor = challenge?.mode === 'individual_random' ? me?.assigned_color : challenge?.shared_color;
@@ -395,7 +413,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
         <View style={styles.waitingHero}>
           <View style={styles.waitingHeroTop}>
             <View style={styles.waitingDoneIcon}><Ionicons color={colors.ink} name="checkmark" size={22} /></View>
-            <Text style={styles.timeBadge}>{remaining(challenge.ends_at)} restantes</Text>
+            <Text style={styles.timeBadge}>{remaining(challenge.ends_at)}</Text>
           </View>
           <View style={styles.waitingHeroCopy}>
             <Text style={styles.waitingKicker}>COLLAGE ENVIADO</Text>
