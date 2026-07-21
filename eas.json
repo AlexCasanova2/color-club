@@ -14,7 +14,6 @@
       }
     },
     "production": {
-      "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
       },

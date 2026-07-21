@@ -58,6 +58,20 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Set unique build numbers
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          const runNumber = Number(process.env.GITHUB_RUN_NUMBER || 0);
+          const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT || 1);
+          const buildNumber = String(100000 + runNumber * 10 + runAttempt);
+          config.expo.ios = { ...config.expo.ios, buildNumber };
+          config.expo.android = { ...config.expo.android, versionCode: Number(buildNumber) };
+          fs.writeFileSync('app.json', `${JSON.stringify(config, null, 2)}\n`);
+          console.log(`Using native build number ${buildNumber}`);
+          NODE
+
       - name: Start EAS build
         run: |
           BUILD_ARGS=(--platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive)
