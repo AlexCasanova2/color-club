@@ -18,6 +18,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.colorclub.app",
       "buildNumber": "4",
+      "entitlements": {
+        "aps-environment": "production"
+      },
       "config": {
         "usesNonExemptEncryption": false
       },
