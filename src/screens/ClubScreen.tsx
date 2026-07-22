@@ -160,7 +160,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   const isWaitingForOthers = challenge?.status === 'active' && myChallengeStatus === 'submitted' && !everyoneSubmitted && !challengeExpired;
   const isWaitingForVoting = challenge?.status === 'active' && myChallengeStatus === 'submitted' && (everyoneSubmitted || challengeExpired);
   const challengeTitle = !canOpenChallenge ? 'Reto ya en curso' : challenge?.status === 'voting' ? 'Elige el mejor collage' : isWaitingForVoting ? 'Todo listo' : isWaitingForOthers ? 'Esperando al resto' : 'Encuentra este color';
-  const challengeTimer = !canOpenChallenge ? 'Podrás participar en el siguiente reto' : isWaitingForVoting ? '0h 00m 00s' : challenge?.status === 'active' ? countdown(challenge.ends_at) : 'Abrir reto →';
+  const challengeTimer = !canOpenChallenge ? 'Podrás participar en el siguiente reto' : challenge?.status === 'voting' && challenge.voting_ends_at ? `Vota en ${countdown(challenge.voting_ends_at)}` : challenge?.status === 'active' ? countdown(challenge.ends_at) : 'Abrir reto →';
   const showWaitingSwatch = isWaitingForOthers || isWaitingForVoting;
 
   return (

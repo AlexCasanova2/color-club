@@ -514,6 +514,11 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
       <Screen>
         <Header title="Votación" onBack={onBack} />
         {revealModal}
+        <View style={styles.votingHero}>
+          <View style={styles.votingHeroTop}><Text style={styles.votingKicker}>VOTACIÓN ABIERTA</Text><Ionicons color={colors.ink} name="timer-outline" size={22} /></View>
+          <Text style={styles.votingTime}>{challenge.voting_ends_at ? remaining(challenge.voting_ends_at) : '24h 00m 00s'}</Text>
+          <Text style={styles.votingTimeLabel}>para elegir tu favorito</Text>
+        </View>
         <View style={styles.heading}><Eyebrow>Mira cada composición con calma</Eyebrow><Title>Tu favorito</Title><Body muted>Toca un collage para verlo a pantalla completa. Tienes un voto y no se puede cambiar.</Body></View>
         {me.status === 'disqualified' && <Card style={styles.notice}><Body>No completaste el reto, así que esta vez no puedes votar.</Body></Card>}
         {votedId && <Card style={styles.notice}><Body>Voto enviado. El resultado aparecerá cuando cierre la votación.</Body></Card>}
@@ -557,7 +562,18 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   const ordered = participants.map((participant) => ({
     ...participant,
     score: votes.filter((voteItem) => voteItem.voted_participant_id === participant.id).length,
-  })).sort((a, b) => b.score - a.score);
+  })).sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'submitted' ? -1 : 1;
+    return b.score - a.score;
+  });
+  const validParticipantCount = participants.filter((participant) => participant.status === 'submitted').length;
+  const automaticResultCopy = validParticipantCount === 0
+    ? 'Esta vez no hubo ningún collage válido y el reto queda sin ganador.'
+    : validParticipantCount === 1
+      ? 'Solo hubo un collage válido, así que gana automáticamente.'
+      : validParticipantCount === 2
+        ? 'Con dos collages no hay una votación real: ambos comparten el primer puesto.'
+        : 'Explora cada collage a pantalla completa. Los empates comparten posición.';
   let previousScore: number | null = null;
   let previousPosition = 0;
   return (
@@ -567,7 +583,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
       <View style={styles.resultsHero}>
         <View style={styles.resultsHeroTop}><Text style={styles.resultsKicker}>RETO CERRADO</Text><View style={styles.resultsIcon}><Ionicons color={colors.ink} name="trophy-outline" size={20} /></View></View>
         <Title>El veredicto</Title>
-        <Body>Explora cada collage a pantalla completa. Los empates comparten posición.</Body>
+        <Body>{automaticResultCopy}</Body>
       </View>
       <View style={styles.results}>
         {ordered.map((participant, index) => {
@@ -722,6 +738,11 @@ const styles = StyleSheet.create({
   ownCollageMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
   doneBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   notice: { marginBottom: 16, backgroundColor: colors.yellow, borderWidth: 0 },
+  votingHero: { minHeight: 180, marginTop: 18, borderRadius: 30, padding: 22, backgroundColor: colors.yellow, justifyContent: 'flex-end' },
+  votingHeroTop: { position: 'absolute', top: 20, left: 22, right: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  votingKicker: { color: '#11121799', fontSize: 11, fontWeight: '900', letterSpacing: 1.1 },
+  votingTime: { color: colors.ink, fontSize: 46, lineHeight: 50, fontWeight: '900', letterSpacing: -1.8 },
+  votingTimeLabel: { color: colors.ink, opacity: 0.68, fontSize: 14, fontWeight: '700', marginTop: 3 },
   candidates: { gap: 18 },
   candidateCard: { overflow: 'hidden' },
   candidateHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },

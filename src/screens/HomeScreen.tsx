@@ -156,7 +156,7 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
             <View style={styles.heroCopy}>
               <Text style={styles.heroKicker}>{challenge ? challenge.club_name : 'Color Club'}</Text>
               <Text style={styles.heroTitle}>{challengeLocked ? 'Retos en\ntus clubs' : challenge ? (challenge.status === 'voting' ? 'Hora de\nvotar' : 'Reto\nen curso') : 'Tu próximo\nreto empieza aquí'}</Text>
-              <Text style={styles.heroMeta}>{challengeLocked ? 'Hay un reto activo, pero empezó antes de que entraras. Si otro club lanza uno nuevo, aparecerá aquí.' : challenge ? (challenge.status === 'voting' ? 'Elige tu collage favorito' : `${timeLeft(challenge.ends_at)} para completar ${challenge.photo_count ?? 6} fotos`) : 'Crea un club e invita a tus amigos'}</Text>
+              <Text style={styles.heroMeta}>{challengeLocked ? 'Hay un reto activo, pero empezó antes de que entraras. Si otro club lanza uno nuevo, aparecerá aquí.' : challenge ? (challenge.status === 'voting' && challenge.voting_ends_at ? `${timeLeft(challenge.voting_ends_at)} para votar` : `${timeLeft(challenge.ends_at)} para completar ${challenge.photo_count ?? 6} fotos`) : 'Crea un club e invita a tus amigos'}</Text>
               {challenge && <Text style={styles.heroLink}>{challengeLocked ? 'Esperando próximo reto' : 'Abrir reto  →'}</Text>}
             </View>
             <View style={styles.sculpture}>
