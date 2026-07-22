@@ -30,7 +30,9 @@
     "android": {
       "package": "com.colorclub.app",
       "versionCode": 1,
-      "permissions": [],
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
@@ -53,7 +55,8 @@
         {
           "faceIDPermission": "Color Club usa Face ID para proteger y desbloquear tu sesión."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "extra": {
       "eas": {

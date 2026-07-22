@@ -10,6 +10,7 @@ import { FloatingMenu, type MenuTab } from '@/components/FloatingMenu';
 import { Body, Button, Card, Screen, Title } from '@/components/ui';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { getUnreadNotificationCount, markNotificationRead } from '@/lib/api';
+import { registerForPushNotifications } from '@/lib/pushNotifications';
 import { colors } from '@/lib/theme';
 import { AuthScreen } from '@/screens/AuthScreen';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
@@ -188,6 +189,11 @@ export default function App() {
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [session]);
+
+  useEffect(() => {
+    if (!session || !biometricUnlocked) return;
+    void registerForPushNotifications().catch(() => undefined);
+  }, [session?.user.id, biometricUnlocked]);
 
   if (!isSupabaseConfigured) return <><StatusBar style="dark" /><SetupScreen /></>;
   if (checking || checkingOnboarding) return <View style={styles.loading}><StatusBar style="dark" /><ActivityIndicator color={colors.coral} /></View>;

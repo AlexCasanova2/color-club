@@ -29,8 +29,12 @@ function readableTextColor(hex: string) {
 }
 
 function collageLayout(photoCount: number) {
-  if (photoCount === 2) return { aspectRatio: 0.9, columns: 1, rows: 2 };
-  return { aspectRatio: 1.44 / Math.ceil(photoCount / 2), columns: 2, rows: Math.ceil(photoCount / 2) };
+  if (photoCount === 2) return { aspectRatio: 9 / 16, columns: 1, rows: 2, slotAspectRatio: 9 / 8 };
+  if (photoCount === 4) return { aspectRatio: 9 / 16, columns: 2, rows: 2, slotAspectRatio: 9 / 16 };
+  if (photoCount === 6) return { aspectRatio: 9 / 16, columns: 2, rows: 3, slotAspectRatio: 27 / 32 };
+  const rows = Math.ceil(photoCount / 2);
+  const aspectRatio = 1.44 / rows;
+  return { aspectRatio, columns: 2, rows, slotAspectRatio: aspectRatio * rows / 2 };
 }
 
 function Collage({ participant, photoCount = 6, showSlotNumbers = false, style }: { participant: Participant; photoCount?: number; showSlotNumbers?: boolean; style?: ViewStyle }) {
@@ -374,8 +378,19 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={styles.previewContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.previewFrame}><Collage participant={me} photoCount={photoCount} showSlotNumbers style={styles.previewCollage} /></View>
-              <View style={styles.previewFooter}><Ionicons color={colors.green} name="eye-outline" size={18} /><Text style={styles.previewHint}>Esta composición será idéntica en la votación y en los resultados.</Text></View>
+              <View style={styles.previewStage}>
+                <View style={styles.previewHalo} />
+                <View style={styles.previewFrame}>
+                  <View style={styles.previewChrome}><View style={styles.previewChromeDot} /><View style={[styles.previewChromeDot, styles.previewChromeDotMuted]} /><View style={[styles.previewChromeDot, styles.previewChromeDotDark]} /></View>
+                  <Collage participant={me} photoCount={photoCount} showSlotNumbers style={styles.previewCollage} />
+                  <View style={styles.previewBadge}><Ionicons color={colors.ink} name="sparkles-outline" size={15} /><Text style={styles.previewBadgeText}>Final</Text></View>
+                </View>
+              </View>
+              <View style={styles.previewFooter}>
+                <View style={styles.previewChip}><Ionicons color={colors.green} name="images-outline" size={17} /><Text style={styles.previewChipText}>{completed}/{photoCount} fotos</Text></View>
+                <View style={styles.previewChip}><Ionicons color={colors.green} name="eye-outline" size={17} /><Text style={styles.previewChipText}>Vista del club</Text></View>
+              </View>
+              <Text style={styles.previewHint}>Esta composición será idéntica en la votación y en los resultados.</Text>
             </ScrollView>
           </View>
         </Modal>
@@ -414,7 +429,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
               } : undefined;
               return photo ? (
                 <View style={styles.cropContent}>
-                  <View onLayout={(event) => setCropFrameSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={[styles.cropFrame, photoCount === 2 && styles.cropFrameWide]} {...cropPanResponder.panHandlers}>
+                  <View onLayout={(event) => setCropFrameSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={[styles.cropFrame, { aspectRatio: layout.slotAspectRatio }]} {...cropPanResponder.panHandlers}>
                     <Image source={{ uri: photo.photo_url }} style={[styles.cropImage, imageStyle]} />
                     <View pointerEvents="none" style={styles.cropGuide} />
                   </View>
@@ -544,16 +559,9 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
         </View>
         <ErrorText message={error} />
         <Modal animationType="fade" visible={viewingParticipant !== null} onRequestClose={() => setViewingParticipant(null)}>
-          <View style={styles.collageViewer}>
-            <View style={styles.collageViewerHeader}>
-              <View><Text style={styles.collageViewerKicker}>COLLAGE FINAL</Text><Text style={styles.collageViewerName}>{viewingParticipant?.profiles.display_name}</Text></View>
-              <Pressable accessibilityLabel="Cerrar collage" accessibilityRole="button" onPress={() => setViewingParticipant(null)} style={styles.collageViewerClose}><Ionicons color={colors.white} name="close" size={23} /></Pressable>
-            </View>
-            <ScrollView contentContainerStyle={styles.collageViewerContent} showsVerticalScrollIndicator={false}>
-              {viewingParticipant && <Collage participant={viewingParticipant} photoCount={photoCount} style={styles.viewerCollage} />}
-              <Text style={styles.collageViewerHint}>Desliza para revisar la composición completa.</Text>
-            </ScrollView>
-          </View>
+          <Pressable accessibilityLabel="Cerrar collage" accessibilityRole="button" onPress={() => setViewingParticipant(null)} style={styles.collageViewer}>
+            {viewingParticipant && <Collage participant={viewingParticipant} photoCount={photoCount} style={styles.viewerCollage} />}
+          </Pressable>
         </Modal>
       </Screen>
     );
@@ -616,16 +624,9 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
         })}
       </View>
       <Modal animationType="fade" visible={viewingParticipant !== null} onRequestClose={() => setViewingParticipant(null)}>
-        <View style={styles.collageViewer}>
-          <View style={styles.collageViewerHeader}>
-            <View><Text style={styles.collageViewerKicker}>COLLAGE FINAL</Text><Text style={styles.collageViewerName}>{viewingParticipant?.profiles.display_name}</Text></View>
-            <Pressable accessibilityLabel="Cerrar collage" accessibilityRole="button" onPress={() => setViewingParticipant(null)} style={styles.collageViewerClose}><Ionicons color={colors.white} name="close" size={23} /></Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.collageViewerContent} showsVerticalScrollIndicator={false}>
-            {viewingParticipant && <Collage participant={viewingParticipant} photoCount={photoCount} style={styles.viewerCollage} />}
-            <Text style={styles.collageViewerHint}>Collage completo de {viewingParticipant?.profiles.display_name}</Text>
-          </ScrollView>
-        </View>
+        <Pressable accessibilityLabel="Cerrar collage" accessibilityRole="button" onPress={() => setViewingParticipant(null)} style={styles.collageViewer}>
+          {viewingParticipant && <Collage participant={viewingParticipant} photoCount={photoCount} style={styles.viewerCollage} />}
+        </Pressable>
       </Modal>
     </Screen>
   );
@@ -674,16 +675,26 @@ const styles = StyleSheet.create({
   progressDotDone: { width: 22, backgroundColor: colors.ink },
   progress: { textAlign: 'center', color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 14 },
   actionStack: { gap: 10 },
-  previewRoot: { flex: 1, backgroundColor: colors.ink, paddingHorizontal: 18, paddingTop: 116 },
+  previewRoot: { flex: 1, backgroundColor: colors.ink, paddingHorizontal: 18, paddingTop: 112 },
   previewHeader: { position: 'absolute', top: 54, left: 18, right: 18, zIndex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   previewKicker: { color: colors.green, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 3 },
   previewTitle: { color: colors.white, fontSize: 25, lineHeight: 29, fontWeight: '900' },
   previewClose: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFFFFF22', alignItems: 'center', justifyContent: 'center' },
-  previewContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 38 },
-  previewFrame: { borderRadius: 24, padding: 7, backgroundColor: colors.white, shadowColor: '#000000', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.35, shadowRadius: 22, elevation: 12 },
-  previewCollage: { marginBottom: 0, borderRadius: 18, overflow: 'hidden' },
-  previewFooter: { marginTop: 18, minHeight: 52, borderRadius: 18, paddingHorizontal: 14, backgroundColor: '#FFFFFF12', flexDirection: 'row', alignItems: 'center', gap: 10 },
-  previewHint: { flex: 1, color: colors.white, opacity: 0.68, fontSize: 12, lineHeight: 17 },
+  previewContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 38, gap: 14 },
+  previewStage: { alignItems: 'center', justifyContent: 'center' },
+  previewHalo: { position: 'absolute', width: '82%', aspectRatio: 0.58, borderRadius: 46, backgroundColor: colors.lavender, opacity: 0.22, transform: [{ rotate: '-5deg' }] },
+  previewFrame: { width: '86%', borderRadius: 30, paddingTop: 38, shadowColor: '#000000', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.42, shadowRadius: 26, elevation: 14 },
+  previewChrome: { position: 'absolute', top: 14, left: 16, flexDirection: 'row', gap: 5 },
+  previewChromeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.orange },
+  previewChromeDotMuted: { backgroundColor: colors.green },
+  previewChromeDotDark: { backgroundColor: colors.ink },
+  previewCollage: { marginBottom: 0, borderRadius: 22, overflow: 'hidden', backgroundColor: colors.ink },
+  previewBadge: { position: 'absolute', right: 16, top: 10, minHeight: 27, borderRadius: 14, paddingHorizontal: 10, backgroundColor: colors.yellow, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  previewBadgeText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
+  previewFooter: { flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap' },
+  previewChip: { minHeight: 42, borderRadius: 21, paddingHorizontal: 13, backgroundColor: '#FFFFFF12', flexDirection: 'row', alignItems: 'center', gap: 8 },
+  previewChipText: { color: colors.white, fontSize: 12, fontWeight: '800' },
+  previewHint: { color: colors.white, opacity: 0.58, fontSize: 12, lineHeight: 17, textAlign: 'center', paddingHorizontal: 18 },
   previewCard: { width: '100%', overflow: 'hidden', backgroundColor: colors.paper, flexDirection: 'row', flexWrap: 'wrap', gap: 0 },
   previewPhoto: { width: '50%' },
   previewMissing: { backgroundColor: '#2A2A2D', alignItems: 'center', justifyContent: 'center' },
@@ -695,8 +706,7 @@ const styles = StyleSheet.create({
   cropRoot: { flex: 1, backgroundColor: '#000000E8', padding: 18, paddingTop: 74, justifyContent: 'center' },
   cropHeader: { position: 'absolute', top: 54, left: 18, right: 18, zIndex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cropContent: { gap: 16 },
-  cropFrame: { width: '100%', aspectRatio: 0.72, backgroundColor: colors.ink, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  cropFrameWide: { aspectRatio: 1.8 },
+  cropFrame: { width: '100%', backgroundColor: colors.ink, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   cropImage: { position: 'absolute' },
   cropGuide: { ...StyleSheet.absoluteFillObject, borderWidth: 2, borderColor: '#FFFFFFAA' },
   cropHint: { color: colors.white, opacity: 0.72, textAlign: 'center', fontSize: 13, lineHeight: 18 },
@@ -761,7 +771,7 @@ const styles = StyleSheet.create({
   expandBadge: { position: 'absolute', right: 10, bottom: 10, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#111217D9' },
   expandText: { color: colors.white, fontSize: 11, fontWeight: '800' },
   collage: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
-  collagePhoto: { width: '33.333%', aspectRatio: 1, borderWidth: 1, borderColor: colors.surface },
+  collagePhoto: {},
   photoMissing: { backgroundColor: colors.line },
   disqualified: { opacity: 0.52 },
   yourVote: { color: colors.green, textAlign: 'center', fontWeight: '600', marginTop: 5 },
@@ -783,12 +793,6 @@ const styles = StyleSheet.create({
   resultCollage: { marginBottom: 0 },
   votersWrap: { minHeight: 52, paddingHorizontal: 16, justifyContent: 'center' },
   voters: { color: colors.muted, fontSize: 12, lineHeight: 18 },
-  collageViewer: { flex: 1, backgroundColor: colors.ink },
-  collageViewerHeader: { paddingTop: 64, paddingHorizontal: 20, paddingBottom: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  collageViewerKicker: { color: colors.green, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
-  collageViewerName: { color: colors.white, fontSize: 25, lineHeight: 30, fontWeight: '900', marginTop: 4 },
-  collageViewerClose: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF1F', alignItems: 'center', justifyContent: 'center' },
-  collageViewerContent: { flexGrow: 1, paddingHorizontal: 14, paddingBottom: 40, justifyContent: 'center' },
-  viewerCollage: { width: '100%', marginBottom: 0, borderRadius: 6, overflow: 'hidden', backgroundColor: '#292A31' },
-  collageViewerHint: { color: colors.white, opacity: 0.58, textAlign: 'center', fontSize: 12, marginTop: 16 },
+  collageViewer: { flex: 1, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  viewerCollage: { width: '100%', marginBottom: 0, backgroundColor: '#292A31' },
 });

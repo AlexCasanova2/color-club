@@ -132,6 +132,14 @@ export async function markNotificationRead(notificationId: string) {
   fail(error);
 }
 
+export async function savePushToken(token: string, platform: string) {
+  const { error } = await supabase.rpc('save_push_token', {
+    target_token: token,
+    target_platform: platform,
+  });
+  fail(error);
+}
+
 export async function getFriendships(): Promise<Friendship[]> {
   const { data, error } = await supabase
     .from('friendships')

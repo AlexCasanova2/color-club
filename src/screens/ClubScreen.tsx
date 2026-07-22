@@ -219,15 +219,26 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
           <Body>Elige un color y pon el club en marcha.</Body>
         </Pressable>
       ) : (
-        <Card style={styles.emptyRanking}><Body>El admin todavía no ha lanzado un reto.</Body></Card>
+        <Card style={styles.emptyChallengeNotice}><Body>El admin todavía no ha lanzado un reto.</Body></Card>
       )}
 
-      {challenge?.status === 'closed' && <Button label="Ver último resultado" onPress={() => onChallenge(challenge.id)} variant="secondary" />}
-      {challenge?.status === 'closed' && club.admin_id === userId && <Button label="Lanzar un nuevo reto" onPress={onNewChallenge} />}
+      {challenge?.status === 'closed' && (
+        <View style={styles.closedChallengeActions}>
+          <Pressable onPress={() => onChallenge(challenge.id)} style={({ pressed }) => [styles.lastResultCard, pressed && styles.pressed]}>
+            <View style={styles.lastResultIcon}><Ionicons color={colors.ink} name="trophy-outline" size={20} /></View>
+            <View style={styles.lastResultCopy}>
+              <Text style={styles.lastResultTitle}>Ver último resultado</Text>
+              <Text style={styles.lastResultMeta}>Collages, votos y ganador</Text>
+            </View>
+            <Ionicons color={colors.ink} name="chevron-forward" size={22} />
+          </Pressable>
+          {club.admin_id === userId && <Button label="Lanzar un nuevo reto" onPress={onNewChallenge} />}
+        </View>
+      )}
 
       <View style={styles.rankingHeader}><Title size="medium">Clasificación</Title><Text style={styles.rule}>1 voto = 1 punto</Text></View>
       {ranking.length === 0 ? <Card style={styles.emptyRanking}><Body>Aquí aparecerá el ranking al cerrar el primer reto.</Body></Card> : ranking.map((row, index) => (
-        <View key={row.user_id} style={[styles.rankRow, { backgroundColor: [colors.blue, colors.orange, colors.lavender][index % 3] }]}>
+        <View key={row.user_id} style={[styles.rankRow, index === 0 ? styles.rankFirst : index === 1 ? styles.rankSecond : index === 2 ? styles.rankThird : styles.rankRest]}>
           <Text style={styles.position}>{String(row.position).padStart(2, '0')}</Text>
           <Text style={styles.name}>{row.display_name}{row.user_id === userId ? ' (tú)' : ''}</Text>
           <Text style={styles.points}>{row.points} pt{row.points === 1 ? '' : 's'}</Text>
@@ -310,14 +321,25 @@ const styles = StyleSheet.create({
   swatch: { width: 64, height: 64, borderRadius: 22, borderWidth: 6, borderColor: '#FFFFFF88', alignSelf: 'flex-end', alignItems: 'center', justifyContent: 'center' },
   emptyChallenge: { minHeight: 170, padding: 22, borderRadius: 28, backgroundColor: colors.orange, gap: 9, justifyContent: 'center', marginBottom: 16 },
   emptyChallengeTitle: { color: colors.ink, fontSize: 24, fontWeight: '900' },
+  emptyChallengeNotice: { backgroundColor: colors.yellow, borderWidth: 0, marginBottom: 2 },
+  closedChallengeActions: { marginTop: 14, marginBottom: 2, gap: 10 },
+  lastResultCard: { minHeight: 86, padding: 16, borderRadius: 26, backgroundColor: colors.lavender, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  lastResultIcon: { width: 46, height: 46, borderRadius: 17, backgroundColor: '#FFFFFF88', alignItems: 'center', justifyContent: 'center' },
+  lastResultCopy: { flex: 1 },
+  lastResultTitle: { color: colors.ink, fontSize: 18, fontWeight: '900' },
+  lastResultMeta: { color: colors.ink, opacity: 0.65, fontSize: 12, marginTop: 2 },
   pressed: { opacity: 0.72 },
   rankingHeader: { marginTop: 22, marginBottom: 12, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   rule: { color: colors.muted, fontSize: 12 },
   rankRow: { minHeight: 68, marginBottom: 8, paddingHorizontal: 16, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
+  rankFirst: { backgroundColor: colors.yellow },
+  rankSecond: { backgroundColor: colors.lavender },
+  rankThird: { backgroundColor: colors.green },
+  rankRest: { backgroundColor: colors.line },
   position: { width: 42, color: colors.ink, fontWeight: '800' },
   name: { flex: 1, color: colors.ink, fontSize: 16, fontWeight: '700' },
   points: { color: colors.ink, fontWeight: '800' },
-  emptyRanking: { backgroundColor: colors.blue, borderWidth: 0 },
+  emptyRanking: { backgroundColor: colors.surface, borderColor: colors.line },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: '#00000066' },
   sheetHost: { justifyContent: 'flex-end' },

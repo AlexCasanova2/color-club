@@ -14,6 +14,7 @@ Color Club es una app móvil social de retos fotográficos por color. Está cons
 - Chat privado por club con Realtime, avatares y composer adaptado al teclado.
 - Perfil editable con foto, bio, color favorito, estado, color de avatar y nombre de ranking.
 - Notificaciones in-app para retos, solicitudes de amistad y resumen semanal.
+- Notificaciones push mediante Expo Push Notifications y Supabase Edge Functions.
 - Navegación con dock flotante, header tipo Dynamic Island y transiciones entre rutas.
 - Toasts reutilizables con barra de progreso que completa el ancho real del contenedor.
 - Esquema PostgreSQL con RLS, Storage privado, funciones transaccionales y Realtime.
@@ -36,6 +37,18 @@ Para abrir iOS o Android usa `npm run ios` o `npm run android`. La cámara requi
 ## Supabase
 
 Las migraciones configuran tablas, RLS, Storage, funciones RPC y Realtime para clubs, amistades, retos, fotos, votaciones, chat y notificaciones.
+
+### Push Notifications
+
+La app registra tokens Expo en `push_tokens`. Para enviar push reales cuando se cree una notificación interna:
+
+1. Aplica las migraciones con `supabase db push`.
+2. Define un secret para el webhook: `supabase secrets set PUSH_WEBHOOK_SECRET=valor-largo-aleatorio`.
+3. Despliega la función: `supabase functions deploy send-push-notification`.
+4. En Supabase Dashboard crea un Database Webhook para `public.notifications` en evento `INSERT` apuntando a `https://TU-PROYECTO.supabase.co/functions/v1/send-push-notification`.
+5. Añade el header `x-push-webhook-secret` con el mismo valor de `PUSH_WEBHOOK_SECRET`.
+
+En iOS y Android las push requieren builds nativas de EAS; no funcionan como push reales dentro de Expo Go.
 
 Activa o revisa Realtime para estas tablas si tu proyecto no lo habilita automáticamente desde las migraciones:
 
