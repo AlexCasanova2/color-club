@@ -3,7 +3,7 @@
     "name": "Color Club",
     "owner": "annuan",
     "slug": "color-club",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "description": "Retos fotográficos por color para clubs de amigos.",
@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.colorclub.app",
-      "buildNumber": "2",
+      "buildNumber": "4",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -29,7 +29,7 @@
     },
     "android": {
       "package": "com.colorclub.app",
-      "versionCode": 1,
+      "versionCode": 4,
       "permissions": [
         "android.permission.POST_NOTIFICATIONS"
       ],
