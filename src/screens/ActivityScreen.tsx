@@ -2,16 +2,9 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Body, Card, ErrorText, Header, Screen, SkeletonBlock, Title } from '@/components/ui';
-import { deleteNotification, deleteNotifications, getActivity, getNotifications, markAllNotificationsRead, markNotificationRead, respondClubInvite } from '@/lib/api';
+import { deleteNotification, deleteNotifications, getNotifications, markAllNotificationsRead, markNotificationRead, respondClubInvite } from '@/lib/api';
 import { colors } from '@/lib/theme';
-import type { ActivityItem, AppNotification } from '@/types/domain';
-
-const statusText = {
-  configuring: 'Programado',
-  active: 'En juego',
-  voting: 'Votación abierta',
-  closed: 'Finalizado',
-};
+import type { AppNotification } from '@/types/domain';
 
 function ActivitySkeleton() {
   return <View style={styles.list}>{[0, 1, 2, 3].map((item) => <SkeletonBlock key={item} style={styles.skeletonItem} />)}</View>;
@@ -52,7 +45,6 @@ function NotificationRow({ notification, selected, selecting, responding, onOpen
 }
 
 export function ActivityScreen({ userId, onOpenChallenge, onOpenClub, onOpenFriends, onNotificationRead }: { userId: string; onOpenChallenge: (clubId: string, challengeId: string) => void; onOpenClub: (clubId: string) => void; onOpenFriends: () => void; onNotificationRead: () => void }) {
-  const [items, setItems] = useState<ActivityItem[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [selectedNotifications, setSelectedNotifications] = useState<string[]>([]);
   const [selectingNotifications, setSelectingNotifications] = useState(false);
@@ -64,8 +56,8 @@ export function ActivityScreen({ userId, onOpenChallenge, onOpenClub, onOpenFrie
   const unreadNotifications = notifications.filter((notification) => !notification.read_at).length;
 
   useEffect(() => {
-    void Promise.all([getActivity(userId), getNotifications(userId)])
-      .then(([activityItems, notificationItems]) => { setItems(activityItems); setNotifications(notificationItems); })
+    void getNotifications(userId)
+      .then(setNotifications)
       .catch((caught) => setError((caught as Error).message))
       .finally(() => setLoading(false));
   }, [userId]);
@@ -148,14 +140,21 @@ export function ActivityScreen({ userId, onOpenChallenge, onOpenClub, onOpenFrie
   return (
     <Screen>
       <Header title="Color Club" />
-      <View style={styles.heading}><Title>Actividad</Title><Body muted>Los retos en los que has participado, del más reciente al primero.</Body></View>
+      <View style={styles.heading}>
+        <View style={styles.headingShape} />
+        <View style={styles.headingRing} />
+        <Text style={styles.headingKicker}>Tu movimiento</Text>
+        <Title>Actividad</Title>
+        <Body>Invitaciones, solicitudes y señales nuevas de tus clubs.</Body>
+      </View>
       <ErrorText message={error} />
-      {loading ? <ActivitySkeleton /> : items.length === 0 && notifications.length === 0 ? (
-        <Card style={styles.empty}><Title size="medium">Sin retos todavía</Title><Body muted>Cuando un club lance su primer reto aparecerá aquí.</Body></Card>
+      {loading ? <ActivitySkeleton /> : notifications.length === 0 ? (
+        <Card style={styles.empty}><Title size="medium">Sin actividad todavía</Title><Body muted>Cuando haya invitaciones, solicitudes o avisos aparecerán aquí.</Body></Card>
       ) : (
         <>
           {notifications.length > 0 && (
             <View style={styles.notificationHeader}>
+              <View style={styles.notificationHeaderGlow} />
               <View style={styles.notificationHeaderTop}>
                 <Text style={styles.sectionTitle}>Notificaciones</Text>
                 <Pressable accessibilityLabel="Opciones de notificaciones" accessibilityRole="button" onPress={() => setNotificationActionsOpen((open) => !open)} style={({ pressed }) => [styles.settingsButton, notificationActionsOpen && styles.settingsButtonOpen, pressed && styles.pressed]}>
@@ -191,26 +190,6 @@ export function ActivityScreen({ userId, onOpenChallenge, onOpenClub, onOpenFrie
               />
             ))}
           </View>}
-          {items.length > 0 && <View style={styles.challengeSectionHeader}><Text style={styles.sectionTitle}>Retos</Text><Text style={styles.challengeSectionMeta}>{items.length} en total</Text></View>}
-          <View style={styles.challengeList}>
-            {items.map((item) => {
-              const ownStatus = item.participant_status === 'submitted' ? 'Enviado' : item.participant_status === 'disqualified' ? 'No completado' : 'Pendiente';
-              return (
-                <Pressable key={item.id} onPress={() => onOpenChallenge(item.club_id, item.id)} style={({ pressed }) => [styles.challengeCard, pressed && styles.challengePressed]}>
-                  <View style={[styles.challengeShape, { backgroundColor: item.shared_color ?? colors.lavender }]} />
-                  <View style={styles.challengeCardHeader}>
-                    <Text style={styles.challengeKicker}>{statusText[item.status].toUpperCase()}</Text>
-                    <View style={styles.challengeArrow}><Ionicons color={colors.ink} name="arrow-forward" size={18} /></View>
-                  </View>
-                  <Text numberOfLines={2} style={styles.challengeClub}>{item.club_name}</Text>
-                  <View style={styles.challengeFooter}>
-                    <View style={[styles.challengeColorDot, { backgroundColor: item.shared_color ?? colors.lavender }]} />
-                    <Text style={styles.challengeOwnStatus}>{ownStatus}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
         </>
       )}
     </Screen>
@@ -218,20 +197,24 @@ export function ActivityScreen({ userId, onOpenChallenge, onOpenClub, onOpenFrie
 }
 
 const styles = StyleSheet.create({
-  heading: { marginVertical: 26, gap: 8 },
+  heading: { minHeight: 178, marginTop: 22, marginBottom: 22, padding: 24, borderRadius: 30, backgroundColor: colors.orange, overflow: 'hidden', justifyContent: 'flex-end', gap: 8 },
+  headingKicker: { color: colors.ink, opacity: 0.65, fontSize: 12, fontWeight: '900', letterSpacing: 1.1, textTransform: 'uppercase' },
+  headingShape: { position: 'absolute', width: 126, height: 126, borderRadius: 42, backgroundColor: colors.pink, right: -26, top: -28, transform: [{ rotate: '18deg' }] },
+  headingRing: { position: 'absolute', width: 94, height: 94, borderRadius: 47, borderWidth: 20, borderColor: colors.yellow, right: 34, bottom: -42 },
   skeletonItem: { height: 104, borderRadius: 26 },
   empty: { gap: 12, backgroundColor: colors.orange, borderWidth: 0 },
   sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: '900' },
   list: { gap: 9 },
-  notificationHeader: { marginTop: 10, marginBottom: 2, gap: 12 },
+  notificationHeader: { position: 'relative', zIndex: 5, marginTop: 10, marginBottom: 14, padding: 14, borderRadius: 26, backgroundColor: colors.lavender, overflow: 'visible', gap: 12 },
+  notificationHeaderGlow: { position: 'absolute', width: 78, height: 78, borderRadius: 28, backgroundColor: colors.green, right: 48, top: -34, opacity: 0.72, transform: [{ rotate: '-15deg' }] },
   notificationHeaderTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   settingsButton: { width: 42, height: 42, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
   settingsButtonOpen: { backgroundColor: colors.ink, borderColor: colors.ink },
-  notificationActionsMenu: { padding: 8, borderRadius: 22, backgroundColor: colors.ink, gap: 6 },
+  notificationActionsMenu: { position: 'absolute', right: 0, top: 50, width: 240, padding: 8, borderRadius: 22, backgroundColor: colors.ink, gap: 6, zIndex: 20, elevation: 12, shadowColor: colors.ink, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.16, shadowRadius: 18 },
   menuAction: { minHeight: 46, borderRadius: 16, paddingHorizontal: 12, backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center', gap: 10 },
   menuActionText: { color: colors.ink, fontSize: 13, fontWeight: '900' },
   headerPillDisabled: { opacity: 0.42 },
-  bulkBar: { minHeight: 54, padding: 8, paddingLeft: 15, borderRadius: 22, backgroundColor: colors.lavender, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  bulkBar: { minHeight: 54, padding: 8, paddingLeft: 15, borderRadius: 22, backgroundColor: colors.yellow, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   bulkText: { color: colors.ink, fontSize: 13, fontWeight: '900' },
   bulkDelete: { minHeight: 38, borderRadius: 19, paddingHorizontal: 12, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', gap: 6 },
   bulkDeleteText: { color: colors.white, fontSize: 12, fontWeight: '900' },
@@ -251,17 +234,4 @@ const styles = StyleSheet.create({
   deleteNotification: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
   unreadDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.danger },
   pressed: { opacity: 0.65 },
-  challengeSectionHeader: { marginTop: 24, marginBottom: 4, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  challengeSectionMeta: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-  challengeList: { gap: 12 },
-  challengeCard: { minHeight: 156, padding: 20, borderRadius: 28, backgroundColor: '#ECEBE6', borderWidth: 1, borderColor: colors.line, overflow: 'hidden', justifyContent: 'space-between' },
-  challengePressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
-  challengeShape: { position: 'absolute', width: 150, height: 150, borderRadius: 52, right: -55, bottom: -65, opacity: 0.28, transform: [{ rotate: '24deg' }] },
-  challengeCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  challengeKicker: { color: colors.muted, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
-  challengeArrow: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.white, alignItems: 'center', justifyContent: 'center' },
-  challengeClub: { maxWidth: '74%', color: colors.ink, fontSize: 29, lineHeight: 31, fontWeight: '900', letterSpacing: -0.7 },
-  challengeFooter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  challengeColorDot: { width: 12, height: 12, borderRadius: 5, borderWidth: 2, borderColor: colors.white },
-  challengeOwnStatus: { color: colors.ink, opacity: 0.68, fontSize: 12, fontWeight: '800' },
 });

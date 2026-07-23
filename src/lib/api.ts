@@ -1,6 +1,6 @@
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
-import type { ActivityItem, AppNotification, Challenge, Club, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, PublicProfile, RankingRow, Vote } from '@/types/domain';
+import type { ActivityItem, AppNotification, Challenge, Club, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, ProfilePreview, PublicProfile, RankingRow, UserStats, Vote } from '@/types/domain';
 
 function isJwtFutureError(error: { message: string } | null) {
   return error?.message.toLowerCase().includes('jwt issued at future') ?? false;
@@ -145,6 +145,28 @@ export async function getFriendshipWithUser(currentUserId: string, targetUserId:
     .maybeSingle();
   fail(error);
   return data as unknown as Friendship | null;
+}
+
+export async function getUserStats(userId: string): Promise<UserStats> {
+  const { data, error } = await supabase.rpc('get_user_stats', { target_user_id: userId }).maybeSingle();
+  fail(error);
+  return (data ?? {
+    total_challenges: 0,
+    submitted_collages: 0,
+    wins: 0,
+    best_challenge_position: null,
+    best_season_position: null,
+    seasons_played: 0,
+    votes_received: 0,
+    votes_cast: 0,
+  }) as UserStats;
+}
+
+export async function searchPublicProfiles(searchTerm: string): Promise<ProfilePreview[]> {
+  if (searchTerm.trim().length < 2) return [];
+  const { data, error } = await supabase.rpc('search_public_profiles', { search_term: searchTerm.trim(), limit_count: 6 });
+  fail(error);
+  return (data ?? []) as ProfilePreview[];
 }
 
 export async function markNotificationRead(notificationId: string) {

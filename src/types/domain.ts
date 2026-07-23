@@ -22,6 +22,19 @@ export interface Profile {
 
 export type PublicProfile = Pick<Profile, 'id' | 'display_name' | 'username' | 'avatar_url' | 'bio' | 'favorite_color' | 'status_text' | 'avatar_color' | 'ranking_display_name'>;
 
+export type ProfilePreview = Pick<Profile, 'id' | 'display_name' | 'username' | 'avatar_url' | 'avatar_color'>;
+
+export interface UserStats {
+  total_challenges: number;
+  submitted_collages: number;
+  wins: number;
+  best_challenge_position: number | null;
+  best_season_position: number | null;
+  seasons_played: number;
+  votes_received: number;
+  votes_cast: number;
+}
+
 export interface Club {
   id: string;
   name: string;

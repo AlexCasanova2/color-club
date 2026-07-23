@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Alert, Image, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ToastOverlay } from '@/components/Toast';
 import { Body, Button, Card, ErrorText, Field, Header, Screen, SkeletonBlock, Title } from '@/components/ui';
-import { getFriendships, removeFriendship, respondFriendRequest, sendFriendRequest } from '@/lib/api';
+import { getFriendships, removeFriendship, respondFriendRequest, searchPublicProfiles, sendFriendRequest } from '@/lib/api';
 import { colors } from '@/lib/theme';
-import type { Friendship, Profile } from '@/types/domain';
+import type { Friendship, Profile, ProfilePreview } from '@/types/domain';
 
-function Identity({ profile }: { profile: Profile }) {
+function Identity({ profile }: { profile: Profile | ProfilePreview }) {
   return (
     <>
       <View style={styles.avatar}>{profile.avatar_url ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} /> : <Text style={[styles.initial, { backgroundColor: profile.avatar_color ?? colors.ink }]}>{profile.display_name.charAt(0).toUpperCase()}</Text>}</View>
@@ -23,11 +24,14 @@ function FriendsSkeleton() {
 
 export function FriendsScreen({ userId, onOpenProfile }: { userId: string; onOpenProfile: (userId: string) => void }) {
   const [relationships, setRelationships] = useState<Friendship[]>([]);
+  const [results, setResults] = useState<ProfilePreview[]>([]);
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [toastKey, setToastKey] = useState(0);
 
   async function load() {
     try { setRelationships(await getFriendships()); setError(null); }
@@ -37,16 +41,34 @@ export function FriendsScreen({ userId, onOpenProfile }: { userId: string; onOpe
 
   useEffect(() => { void load(); }, []);
 
+  useEffect(() => {
+    const query = identifier.trim();
+    if (query.length < 2) { setResults([]); setSearching(false); return; }
+    setSearching(true);
+    const timeout = setTimeout(() => {
+      void searchPublicProfiles(query)
+        .then(setResults)
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 220);
+    return () => clearTimeout(timeout);
+  }, [identifier]);
+
+  function showToast(text: string) {
+    setToast(text);
+    setToastKey((current) => current + 1);
+  }
+
   async function send() {
     if (!identifier.trim()) return;
     setSaving(true);
     setError(null);
-    setMessage(null);
     Keyboard.dismiss();
     try {
       await sendFriendRequest(identifier);
       setIdentifier('');
-      setMessage('Solicitud enviada.');
+      setResults([]);
+      showToast('Solicitud enviada.');
       await load();
     } catch (caught) { setError((caught as Error).message); }
     setSaving(false);
@@ -86,10 +108,19 @@ export function FriendsScreen({ userId, onOpenProfile }: { userId: string; onOpe
           autoCorrect={false}
           returnKeyType="send"
         />
+        {(searching || results.length > 0) && (
+          <View style={styles.previewList}>
+            {searching ? <Text style={styles.previewHint}>Buscando...</Text> : results.map((profile) => (
+              <Pressable key={profile.id} onPress={() => setIdentifier(`@${profile.username}`)} style={({ pressed }) => [styles.previewRow, pressed && styles.pressed]}>
+                <Identity profile={profile} />
+                <Text style={styles.previewAction}>Elegir</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         <Button label="Enviar solicitud" onPress={send} loading={saving} disabled={!identifier.trim()} />
       </Card>
       <ErrorText message={error} />
-      {message && <Text style={styles.message}>{message}</Text>}
       {loading ? <FriendsSkeleton /> : (
         <>
           {received.length > 0 && <Text style={styles.sectionTitle}>Solicitudes</Text>}
@@ -129,6 +160,7 @@ export function FriendsScreen({ userId, onOpenProfile }: { userId: string; onOpe
           </View>
         </>
       )}
+      <ToastOverlay message={toast} onHidden={() => setToast(null)} trigger={toastKey} />
     </Screen>
   );
 }
@@ -136,7 +168,10 @@ export function FriendsScreen({ userId, onOpenProfile }: { userId: string; onOpe
 const styles = StyleSheet.create({
   heading: { marginVertical: 26, gap: 8 },
   searchCard: { gap: 14, backgroundColor: colors.lavender, borderWidth: 0 },
-  message: { color: colors.green, fontSize: 13, marginTop: 12 },
+  previewList: { gap: 8 },
+  previewHint: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  previewRow: { minHeight: 62, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#FFFFFF88', flexDirection: 'row', alignItems: 'center', gap: 10 },
+  previewAction: { color: colors.ink, fontSize: 12, fontWeight: '900' },
   skeletonFriend: { height: 82, borderRadius: 24 },
   sectionTitle: { color: colors.muted, fontSize: 13, fontWeight: '600', marginTop: 30, marginBottom: 10 },
   list: { gap: 10 },
