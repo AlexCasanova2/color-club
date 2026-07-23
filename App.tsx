@@ -205,7 +205,7 @@ export default function App() {
   if (route.name === 'home') {
     content = <HomeScreen userId={session.user.id} onOpenClub={(clubId) => setRoute({ name: 'club', clubId })} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} />;
   } else if (route.name === 'activity') {
-    content = <ActivityScreen userId={session.user.id} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} onOpenFriends={() => setRoute({ name: 'friends' })} onNotificationRead={() => setUnreadNotifications((current) => Math.max(0, current - 1))} />;
+    content = <ActivityScreen userId={session.user.id} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} onOpenClub={(clubId) => setRoute({ name: 'club', clubId })} onOpenFriends={() => setRoute({ name: 'friends' })} onNotificationRead={() => setUnreadNotifications((current) => Math.max(0, current - 1))} />;
   } else if (route.name === 'account') {
     content = <AccountScreen userId={session.user.id} email={session.user.email ?? ''} onEditProfile={() => setRoute({ name: 'edit-profile' })} toastMessage={accountToast} onToastShown={() => setAccountToast(null)} />;
   } else if (route.name === 'edit-profile') {
@@ -256,6 +256,7 @@ export default function App() {
       setUnreadNotifications((current) => Math.max(0, current - 1));
     }
     if (notification.type === 'challenge' && notification.related_club_id && notification.related_challenge_id) setRoute({ name: 'challenge', clubId: notification.related_club_id, challengeId: notification.related_challenge_id });
+    else if (notification.type === 'club_invite') setRoute({ name: 'activity' });
     else if (notification.type === 'friend_request') setRoute({ name: 'friends' });
     else setRoute({ name: 'activity' });
   }
@@ -275,7 +276,7 @@ export default function App() {
       <Modal animationType="fade" transparent visible={notificationToast !== null}>
         <View pointerEvents="box-none" style={styles.notificationLayer}>
           <Pressable onPress={() => notificationToast && void openNotification(notificationToast)} style={styles.notificationToast}>
-            <View style={styles.notificationIcon}><Ionicons color={colors.ink} name={notificationToast?.type === 'friend_request' ? 'person-add-outline' : notificationToast?.type === 'weekly_summary' ? 'calendar-outline' : 'color-palette-outline'} size={20} /></View>
+            <View style={styles.notificationIcon}><Ionicons color={colors.ink} name={notificationToast?.type === 'friend_request' ? 'person-add-outline' : notificationToast?.type === 'club_invite' ? 'people-outline' : notificationToast?.type === 'weekly_summary' ? 'calendar-outline' : 'color-palette-outline'} size={20} /></View>
             <View style={styles.notificationCopy}><Text style={styles.notificationTitle}>{notificationToast?.title}</Text><Text style={styles.notificationBody}>{notificationToast?.body}</Text></View>
           </Pressable>
         </View>

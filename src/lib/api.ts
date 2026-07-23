@@ -132,6 +132,22 @@ export async function markNotificationRead(notificationId: string) {
   fail(error);
 }
 
+export async function markAllNotificationsRead(userId: string) {
+  const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('user_id', userId).is('read_at', null);
+  fail(error);
+}
+
+export async function deleteNotification(notificationId: string) {
+  const { error } = await supabase.from('notifications').delete().eq('id', notificationId);
+  fail(error);
+}
+
+export async function deleteNotifications(notificationIds: string[]) {
+  if (!notificationIds.length) return;
+  const { error } = await supabase.from('notifications').delete().in('id', notificationIds);
+  fail(error);
+}
+
 export async function savePushToken(token: string, platform: string) {
   const { error } = await supabase.rpc('save_push_token', {
     target_token: token,
@@ -186,6 +202,12 @@ export async function inviteUserToClub(clubId: string, identifier: string) {
     search_term: identifier.trim(),
   });
   fail(error);
+}
+
+export async function respondClubInvite(inviteId: string, accept: boolean): Promise<string> {
+  const { data, error } = await supabase.rpc('respond_club_invite', { target_invite_id: inviteId, accept_invite: accept });
+  fail(error);
+  return data as string;
 }
 
 export async function getClub(clubId: string, userId?: string): Promise<{ club: Club; challenge: Challenge | null; seasonId: string; ranking: RankingRow[]; myChallengeColor: string | null; myChallengeStatus: Participant['status'] | null; isChallengeParticipant: boolean; submittedCount: number; participantCount: number }> {

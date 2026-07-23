@@ -17,6 +17,11 @@ export function ToastBubble({ message, onHidden, trigger, compact = false, style
   const translateY = useRef(new Animated.Value(8)).current;
   const progress = useRef(new Animated.Value(0)).current;
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onHiddenRef = useRef(onHidden);
+
+  useEffect(() => {
+    onHiddenRef.current = onHidden;
+  }, [onHidden]);
 
   useEffect(() => {
     if (!message) return;
@@ -36,7 +41,7 @@ export function ToastBubble({ message, onHidden, trigger, compact = false, style
           Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }),
           Animated.timing(translateY, { toValue: 8, duration: 180, useNativeDriver: true }),
         ]).start(({ finished: hidden }) => {
-          if (hidden) onHidden?.();
+          if (hidden) onHiddenRef.current?.();
         });
       }, 180);
     });
@@ -45,7 +50,7 @@ export function ToastBubble({ message, onHidden, trigger, compact = false, style
       if (hideTimer.current) clearTimeout(hideTimer.current);
       progress.stopAnimation();
     };
-  }, [message, trigger, onHidden, opacity, progress, translateY]);
+  }, [message, trigger, opacity, progress, translateY]);
 
   if (!message) return null;
 

@@ -23,8 +23,8 @@ function isNotificationRecord(value: unknown): value is NotificationRecord {
 
 Deno.serve(async (request) => {
   if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
-  if (webhookSecret && request.headers.get('x-push-webhook-secret') !== webhookSecret) return new Response('Unauthorized', { status: 401 });
-  if (!supabaseUrl || !serviceRoleKey) return new Response('Missing function configuration', { status: 500 });
+  if (!supabaseUrl || !serviceRoleKey || !webhookSecret) return new Response('Missing function configuration', { status: 500 });
+  if (request.headers.get('x-push-webhook-secret') !== webhookSecret) return new Response('Unauthorized', { status: 401 });
 
   const payload = await request.json().catch(() => null) as unknown;
   const maybeRecord = payload && typeof payload === 'object' && 'record' in payload ? (payload as { record?: unknown }).record : payload;

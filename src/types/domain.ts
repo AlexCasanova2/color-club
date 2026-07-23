@@ -108,12 +108,13 @@ export interface Vote {
 export interface AppNotification {
   id: string;
   user_id: string;
-  type: 'challenge' | 'friend_request' | 'weekly_summary';
+  type: 'challenge' | 'friend_request' | 'club_invite' | 'weekly_summary';
   title: string;
   body: string;
   related_club_id: string | null;
   related_challenge_id: string | null;
   related_user_id: string | null;
+  related_invite_id: string | null;
   read_at: string | null;
   created_at: string;
 }

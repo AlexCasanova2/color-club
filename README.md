@@ -48,6 +48,8 @@ La app registra tokens Expo en `push_tokens`. Para enviar push reales cuando se 
 4. En Supabase Dashboard crea un Database Webhook para `public.notifications` en evento `INSERT` apuntando a `https://TU-PROYECTO.supabase.co/functions/v1/send-push-notification`.
 5. Añade el header `x-push-webhook-secret` con el mismo valor de `PUSH_WEBHOOK_SECRET`.
 
+La función rechaza todas las peticiones si falta `PUSH_WEBHOOK_SECRET`; no despliegues el webhook sin configurar antes ese secret.
+
 En iOS y Android las push requieren builds nativas de EAS; no funcionan como push reales dentro de Expo Go.
 
 Activa o revisa Realtime para estas tablas si tu proyecto no lo habilita automáticamente desde las migraciones:
@@ -67,7 +69,7 @@ Las funciones internas no están disponibles para clientes y deben ejecutarse co
 
 ## Seguridad
 
-El bucket `collages` es privado. La política de Storage delega en la política RLS de `photos`, por lo que cada participante solo puede acceder a sus propias fotos durante el reto. El club obtiene acceso al entrar en fase de votación.
+El bucket `collages` es privado. Cada participante solo puede acceder a sus propias fotos durante el reto; los miembros activos del club obtienen acceso compartido al entrar en fase de votación.
 
 Los votos se validan mediante trigger para impedir auto-votos, votos de descalificados y objetivos inválidos. Las tablas de chat, amistades, miembros y notificaciones también usan RLS para limitar lectura y escritura al usuario o club correspondiente.
 

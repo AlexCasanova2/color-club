@@ -145,7 +145,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
       await inviteUserToClub(club.id, identifierToInvite);
       setIdentifier('');
       if (friendId) setInvitedFriendIds((current) => current.includes(friendId) ? current : [...current, friendId]);
-      showToast('Invitación enviada al grupo.');
+      showToast('Invitación enviada.');
     } catch (caught) { setInviteError((caught as Error).message); }
     setInviting(false);
   }
@@ -261,8 +261,8 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
                   <View><Text style={styles.inviteCodeLabel}>Código del grupo</Text><Text style={styles.inviteCode}>{club.invite_code}</Text></View>
                   <View style={styles.inviteCodeIcon}><Ionicons color={colors.ink} name="copy-outline" size={19} /></View>
                 </Pressable>
-                <Field label="Usuario o código" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} placeholder="@usuario o CC-A1B2C3D4E5F6" />
-                <Button label="Invitar por identificador" onPress={() => void invite(identifier)} loading={inviting} disabled={!identifier.trim()} />
+                <Field label="Amigo o código" value={identifier} onChangeText={setIdentifier} autoCapitalize="none" autoCorrect={false} placeholder="@amigo o CC-A1B2C3D4E5F6" />
+                <Button label="Enviar invitación" onPress={() => void invite(identifier)} loading={inviting} disabled={!identifier.trim()} />
                 <ErrorText message={inviteError} />
                 {friends.length > 0 && <Text style={styles.friendSection}>Tus amigos</Text>}
                 <View style={styles.friendList}>
