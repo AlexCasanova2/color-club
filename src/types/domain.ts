@@ -20,6 +20,8 @@ export interface Profile {
   ranking_display_name: 'display_name' | 'username';
 }
 
+export type PublicProfile = Pick<Profile, 'id' | 'display_name' | 'username' | 'avatar_url' | 'bio' | 'favorite_color' | 'status_text' | 'avatar_color' | 'ranking_display_name'>;
+
 export interface Club {
   id: string;
   name: string;

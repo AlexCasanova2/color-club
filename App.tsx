@@ -24,6 +24,7 @@ import { ClubManageScreen } from '@/screens/ClubManageScreen';
 import { HomeScreen } from '@/screens/HomeScreen';
 import { FriendsScreen } from '@/screens/FriendsScreen';
 import { NewChallengeScreen } from '@/screens/NewChallengeScreen';
+import { PublicProfileScreen } from '@/screens/PublicProfileScreen';
 import type { AppNotification } from '@/types/domain';
 
 type Route =
@@ -36,7 +37,8 @@ type Route =
   | { name: 'club-chat'; clubId: string }
   | { name: 'club-manage'; clubId: string }
   | { name: 'new-challenge'; clubId: string }
-  | { name: 'challenge'; clubId: string; challengeId: string };
+  | { name: 'challenge'; clubId: string; challengeId: string }
+  | { name: 'public-profile'; userId: string; backTo: 'account' | 'friends' | 'club-manage'; clubId?: string };
 
 const onboardingStorageKey = 'color-club:onboarding-seen:v1';
 
@@ -207,11 +209,11 @@ export default function App() {
   } else if (route.name === 'activity') {
     content = <ActivityScreen userId={session.user.id} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} onOpenClub={(clubId) => setRoute({ name: 'club', clubId })} onOpenFriends={() => setRoute({ name: 'friends' })} onNotificationRead={() => setUnreadNotifications((current) => Math.max(0, current - 1))} />;
   } else if (route.name === 'account') {
-    content = <AccountScreen userId={session.user.id} email={session.user.email ?? ''} onEditProfile={() => setRoute({ name: 'edit-profile' })} toastMessage={accountToast} onToastShown={() => setAccountToast(null)} />;
+    content = <AccountScreen userId={session.user.id} email={session.user.email ?? ''} onEditProfile={() => setRoute({ name: 'edit-profile' })} onViewPublicProfile={() => setRoute({ name: 'public-profile', userId: session.user.id, backTo: 'account' })} toastMessage={accountToast} onToastShown={() => setAccountToast(null)} />;
   } else if (route.name === 'edit-profile') {
     content = <EditProfileScreen userId={session.user.id} onBack={() => setRoute({ name: 'account' })} onSaved={() => { setAccountToast('Perfil actualizado.'); setRoute({ name: 'account' }); }} />;
   } else if (route.name === 'friends') {
-    content = <FriendsScreen userId={session.user.id} />;
+    content = <FriendsScreen userId={session.user.id} onOpenProfile={(profileUserId) => setRoute({ name: 'public-profile', userId: profileUserId, backTo: 'friends' })} />;
   } else if (route.name === 'club') {
     content = (
       <ClubScreen
@@ -227,7 +229,7 @@ export default function App() {
   } else if (route.name === 'club-chat') {
     content = <ClubChatScreen clubId={route.clubId} userId={session.user.id} onBack={() => setRoute({ name: 'club', clubId: route.clubId })} />;
   } else if (route.name === 'club-manage') {
-    content = <ClubManageScreen clubId={route.clubId} userId={session.user.id} onBack={() => setRoute({ name: 'club', clubId: route.clubId })} onDeleted={() => setRoute({ name: 'home' })} />;
+    content = <ClubManageScreen clubId={route.clubId} userId={session.user.id} onBack={() => setRoute({ name: 'club', clubId: route.clubId })} onDeleted={() => setRoute({ name: 'home' })} onOpenProfile={(profileUserId) => setRoute({ name: 'public-profile', userId: profileUserId, backTo: 'club-manage', clubId: route.clubId })} />;
   } else if (route.name === 'new-challenge') {
     content = (
       <NewChallengeScreen
@@ -236,7 +238,7 @@ export default function App() {
         onCreated={(challengeId) => setRoute({ name: 'challenge', clubId: route.clubId, challengeId })}
       />
     );
-  } else {
+  } else if (route.name === 'challenge') {
     content = (
       <ChallengeScreen
         challengeId={route.challengeId}
@@ -244,10 +246,12 @@ export default function App() {
         onBack={() => setRoute({ name: 'club', clubId: route.clubId })}
       />
     );
+  } else {
+    content = <PublicProfileScreen userId={route.userId} viewerUserId={session.user.id} onBack={() => route.backTo === 'account' ? setRoute({ name: 'account' }) : route.backTo === 'club-manage' && route.clubId ? setRoute({ name: 'club-manage', clubId: route.clubId }) : setRoute({ name: 'friends' })} />;
   }
 
   const activeTab: MenuTab = route.name === 'activity' ? 'activity' : route.name === 'friends' ? 'friends' : route.name === 'account' ? 'account' : 'clubs';
-  const routeKey = route.name === 'club' || route.name === 'club-chat' || route.name === 'club-manage' || route.name === 'new-challenge' ? `${route.name}-${route.clubId}` : route.name === 'challenge' ? `${route.name}-${route.challengeId}` : route.name;
+  const routeKey = route.name === 'club' || route.name === 'club-chat' || route.name === 'club-manage' || route.name === 'new-challenge' ? `${route.name}-${route.clubId}` : route.name === 'challenge' ? `${route.name}-${route.challengeId}` : route.name === 'public-profile' ? `${route.name}-${route.userId}` : route.name;
   const showFloatingMenu = !['club-chat', 'club-manage', 'new-challenge', 'edit-profile'].includes(route.name);
   async function openNotification(notification: AppNotification) {
     setNotificationToast(null);

@@ -21,7 +21,7 @@ function FriendsSkeleton() {
   return <View style={styles.list}>{[0, 1, 2].map((item) => <SkeletonBlock key={item} style={styles.skeletonFriend} />)}</View>;
 }
 
-export function FriendsScreen({ userId }: { userId: string }) {
+export function FriendsScreen({ userId, onOpenProfile }: { userId: string; onOpenProfile: (userId: string) => void }) {
   const [relationships, setRelationships] = useState<Friendship[]>([]);
   const [identifier, setIdentifier] = useState('');
   const [loading, setLoading] = useState(true);
@@ -96,7 +96,7 @@ export function FriendsScreen({ userId }: { userId: string }) {
           <View style={styles.list}>
             {received.map((item) => (
               <Card key={item.id} style={styles.personCard}>
-                <View style={styles.person}><Identity profile={item.requester} /></View>
+                <Pressable onPress={() => onOpenProfile(item.requester_id)} style={({ pressed }) => [styles.person, pressed && styles.pressed]}><Identity profile={item.requester} /></Pressable>
                 <View style={styles.requestActions}>
                   <Pressable onPress={() => void respond(item.id, true)} style={[styles.smallButton, styles.acceptButton]}><Text style={styles.acceptText}>Aceptar</Text></Pressable>
                   <Pressable onPress={() => void respond(item.id, false)} style={styles.smallButton}><Text style={styles.smallButtonText}>Ahora no</Text></Pressable>
@@ -110,7 +110,7 @@ export function FriendsScreen({ userId }: { userId: string }) {
             {friends.map((item, index) => {
                 const profile = item.requester_id === userId ? item.addressee : item.requester;
                 return (
-                  <Pressable key={item.id} onLongPress={() => remove(item, profile)} style={({ pressed }) => [styles.friend, { backgroundColor: [colors.blue, colors.green, colors.orange, colors.lavender][index % 4] }, pressed && styles.pressed]}>
+                  <Pressable key={item.id} onLongPress={() => remove(item, profile)} onPress={() => onOpenProfile(profile.id)} style={({ pressed }) => [styles.friend, { backgroundColor: [colors.blue, colors.green, colors.orange, colors.lavender][index % 4] }, pressed && styles.pressed]}>
                     <Identity profile={profile} />
                     <Text style={styles.code}>{profile.friend_code}</Text>
                   </Pressable>
@@ -121,10 +121,10 @@ export function FriendsScreen({ userId }: { userId: string }) {
           {sent.length > 0 && <Text style={styles.sectionTitle}>Pendientes</Text>}
           <View style={styles.list}>
             {sent.map((item) => (
-              <View key={item.id} style={styles.friend}>
+              <Pressable key={item.id} onPress={() => onOpenProfile(item.addressee_id)} style={({ pressed }) => [styles.friend, pressed && styles.pressed]}>
                 <Identity profile={item.addressee} />
                 <Text style={styles.pending}>Enviada</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         </>

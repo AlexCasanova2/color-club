@@ -29,7 +29,7 @@ function SettingRow({ icon, title, description, value, onChange, last = false }:
   );
 }
 
-export function AccountScreen({ userId, email, onEditProfile, toastMessage, onToastShown }: { userId: string; email: string; onEditProfile: () => void; toastMessage?: string | null; onToastShown?: () => void }) {
+export function AccountScreen({ userId, email, onEditProfile, onViewPublicProfile, toastMessage, onToastShown }: { userId: string; email: string; onEditProfile: () => void; onViewPublicProfile: () => void; toastMessage?: string | null; onToastShown?: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -113,6 +113,12 @@ export function AccountScreen({ userId, email, onEditProfile, toastMessage, onTo
             <Ionicons color={colors.ink} name="chevron-forward" size={19} />
           </Pressable>
 
+          <Pressable onPress={onViewPublicProfile} style={({ pressed }) => [styles.publicProfileCard, pressed && styles.pressed]}>
+            <View style={styles.editProfileIcon}><Ionicons color={colors.ink} name="person-circle-outline" size={22} /></View>
+            <View style={styles.settingCopy}><Text style={styles.editProfileTitle}>Ver perfil público</Text><Text style={styles.settingDescription}>Previsualiza cómo te ven en Color Club</Text></View>
+            <Ionicons color={colors.ink} name="chevron-forward" size={19} />
+          </Pressable>
+
           <Text style={styles.sectionTitle}>Notificaciones</Text>
           <View style={styles.sectionCard}>
             <SettingRow icon="color-palette-outline" title="Retos del club" description="Inicios, plazos y votaciones" value={value('challenge_notifications')} onChange={(next) => void updateSetting('challenge_notifications', next)} />
@@ -182,6 +188,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: '800', marginTop: 30, marginBottom: 10 },
   sectionCard: { backgroundColor: colors.surface, borderRadius: 24, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 16, overflow: 'hidden' },
   editProfileCard: { minHeight: 84, marginTop: 12, paddingHorizontal: 16, borderRadius: 24, backgroundColor: colors.blue, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  publicProfileCard: { minHeight: 84, marginTop: 10, paddingHorizontal: 16, borderRadius: 24, backgroundColor: colors.green, flexDirection: 'row', alignItems: 'center', gap: 12 },
   editProfileIcon: { width: 42, height: 42, borderRadius: 15, backgroundColor: '#FFFFFF88', alignItems: 'center', justifyContent: 'center' },
   editProfileTitle: { color: colors.ink, fontSize: 15, fontWeight: '800' },
   settingRow: { minHeight: 82, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: colors.line },

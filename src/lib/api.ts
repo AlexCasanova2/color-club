@@ -1,6 +1,6 @@
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
-import type { ActivityItem, AppNotification, Challenge, Club, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, RankingRow, Vote } from '@/types/domain';
+import type { ActivityItem, AppNotification, Challenge, Club, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, PublicProfile, RankingRow, Vote } from '@/types/domain';
 
 function isJwtFutureError(error: { message: string } | null) {
   return error?.message.toLowerCase().includes('jwt issued at future') ?? false;
@@ -125,6 +125,26 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
     .is('read_at', null);
   fail(error);
   return count ?? 0;
+}
+
+export async function getPublicProfile(userId: string): Promise<PublicProfile> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,display_name,username,avatar_url,bio,favorite_color,status_text,avatar_color,ranking_display_name')
+    .eq('id', userId)
+    .single();
+  fail(error);
+  return data as PublicProfile;
+}
+
+export async function getFriendshipWithUser(currentUserId: string, targetUserId: string): Promise<Friendship | null> {
+  const { data, error } = await supabase
+    .from('friendships')
+    .select('*, requester:profiles!friendships_requester_id_fkey(*), addressee:profiles!friendships_addressee_id_fkey(*)')
+    .or(`and(requester_id.eq.${currentUserId},addressee_id.eq.${targetUserId}),and(requester_id.eq.${targetUserId},addressee_id.eq.${currentUserId})`)
+    .maybeSingle();
+  fail(error);
+  return data as unknown as Friendship | null;
 }
 
 export async function markNotificationRead(notificationId: string) {

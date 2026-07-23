@@ -18,7 +18,7 @@ const durations: Array<{ value: DurationPreset; label: string }> = [
 const photoCounts = [2, 4, 6, 8, 10, 12];
 const roleLabel = { admin: 'Admin', moderator: 'Moderador', member: 'Miembro' };
 
-export function ClubManageScreen({ clubId, userId, onBack, onDeleted }: { clubId: string; userId: string; onBack: () => void; onDeleted: () => void }) {
+export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProfile }: { clubId: string; userId: string; onBack: () => void; onDeleted: () => void; onOpenProfile: (userId: string) => void }) {
   const [club, setClub] = useState<Club | null>(null);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [members, setMembers] = useState<ClubMember[]>([]);
@@ -162,11 +162,13 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted }: { clubId
       <View style={styles.membersList}>
         {members.map((member) => (
           <View key={member.id} style={styles.memberRow}>
-            <View style={styles.avatar}>{member.profiles.avatar_url ? <Image source={{ uri: member.profiles.avatar_url }} style={styles.avatarImage} /> : <Text style={[styles.initial, { backgroundColor: member.profiles.avatar_color ?? colors.ink }]}>{member.profiles.display_name.charAt(0).toUpperCase()}</Text>}</View>
-            <View style={styles.memberCopy}>
-              <Text style={styles.memberName}>{member.profiles.display_name}{member.user_id === userId ? ' (tú)' : ''}</Text>
-              <Text style={styles.memberMeta}>@{member.profiles.username} · {roleLabel[member.role]}</Text>
-            </View>
+            <Pressable onPress={() => onOpenProfile(member.user_id)} style={({ pressed }) => [styles.memberIdentity, pressed && styles.pressed]}>
+              <View style={styles.avatar}>{member.profiles.avatar_url ? <Image source={{ uri: member.profiles.avatar_url }} style={styles.avatarImage} /> : <Text style={[styles.initial, { backgroundColor: member.profiles.avatar_color ?? colors.ink }]}>{member.profiles.display_name.charAt(0).toUpperCase()}</Text>}</View>
+              <View style={styles.memberCopy}>
+                <Text style={styles.memberName}>{member.profiles.display_name}{member.user_id === userId ? ' (tú)' : ''}</Text>
+                <Text style={styles.memberMeta}>@{member.profiles.username} · {roleLabel[member.role]}</Text>
+              </View>
+            </Pressable>
             <Pressable onPress={() => confirmRole(member)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
               <Ionicons color={colors.ink} name={member.role === 'admin' ? 'shield-checkmark' : 'shield-outline'} size={20} />
             </Pressable>
@@ -224,6 +226,7 @@ const styles = StyleSheet.create({
   segmentTextSelected: { color: colors.white },
   membersList: { gap: 10 },
   memberRow: { minHeight: 82, paddingHorizontal: 14, borderRadius: 24, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  memberIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
   avatarImage: { width: 44, height: 44, borderRadius: 22 },
   initial: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', color: colors.white, fontSize: 16, lineHeight: 42, textAlign: 'center', fontWeight: '900' },
