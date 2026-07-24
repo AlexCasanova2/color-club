@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Body, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
+import { Body, ErrorText, Eyebrow, Header, Screen, SuccessModal, Title } from '@/components/ui';
 import { createChallenge, getClub } from '@/lib/api';
 import { colorChoices, colors } from '@/lib/theme';
 import type { DurationPreset } from '@/types/domain';
@@ -26,6 +26,7 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
   const [photoCount, setPhotoCount] = useState(6);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdChallengeId, setCreatedChallengeId] = useState<string | null>(null);
   const holdProgress = useRef(new Animated.Value(0)).current;
   const holdCompleted = useRef(false);
   const hapticInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -51,7 +52,10 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
     const mode = color === individualRandomChoice.hex ? 'individual_random' : 'shared_color';
     const sharedColor = color === sharedRandomChoice.hex ? colorChoices[Math.floor(Math.random() * colorChoices.length)]!.hex : color;
     const colorSelectionMode = color === sharedRandomChoice.hex ? 'shared_random' : color === individualRandomChoice.hex ? 'individual_random' : 'manual';
-    try { onCreated(await createChallenge(clubId, mode, sharedColor, duration, photoCount, colorSelectionMode)); }
+    try {
+      setCreatedChallengeId(await createChallenge(clubId, mode, sharedColor, duration, photoCount, colorSelectionMode));
+      setLoading(false);
+    }
     catch (caught) { setError((caught as Error).message); setLoading(false); }
   }
 
@@ -127,6 +131,13 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
         </Pressable>
       </View>
       <ErrorText message={error} />
+      <SuccessModal
+        actionLabel="Ir al reto"
+        body="El reto ya está preparado para el club. Entra para ver el color y comenzar la cuenta atrás."
+        onAction={() => createdChallengeId && onCreated(createdChallengeId)}
+        title="Reto creado con éxito"
+        visible={createdChallengeId !== null}
+      />
     </Screen>
   );
 }

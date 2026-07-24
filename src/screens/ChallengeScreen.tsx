@@ -2,12 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { ActivityIndicator, Alert, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { File, Paths } from 'expo-file-system';
+import { Image as ExpoImage } from 'expo-image';
+import { ActivityIndicator, Alert, Animated, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Body, Button, Card, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
 import { advanceChallenge, castVote, deletePhoto, getChallenge, submitCollage, uploadPhoto } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
+import { subscribeToResync } from '@/lib/resilience';
 import type { Challenge, Participant, Vote } from '@/types/domain';
 
 const revealColors = ['#E84A3C', '#3157D5', '#F4C542', '#3A8D67', '#E75A9D', '#F27C38', '#7450A8', '#E9E6DF', '#30B7C2', '#9C6ADE', '#6B4F3A', '#111217'];
@@ -44,7 +48,7 @@ function Collage({ participant, photoCount = 6, showSlotNumbers = false, style }
       {Array.from({ length: photoCount }, (_, index) => {
         const photo = participant.photos?.find((item) => item.slot_order === index + 1);
         const slotStyle = { width: `${100 / layout.columns}%` as `${number}%`, height: `${100 / layout.rows}%` as `${number}%` };
-        return photo?.photo_url ? <Image key={index} resizeMode="cover" source={{ uri: photo.photo_url }} style={[styles.collagePhoto, slotStyle]} /> : (
+        return photo?.photo_url ? <ExpoImage cachePolicy="memory-disk" contentFit="cover" key={index} source={{ uri: photo.photo_url }} style={[styles.collagePhoto, slotStyle]} /> : (
           <View key={index} style={[styles.collagePhoto, slotStyle, styles.photoMissing]}>{showSlotNumbers && <Text style={styles.previewSlot}>{index + 1}</Text>}</View>
         );
       })}
@@ -52,7 +56,63 @@ function Collage({ participant, photoCount = 6, showSlotNumbers = false, style }
   );
 }
 
-export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: string; userId: string; onBack: () => void }) {
+function HoldToSubmit({ disabled, loading, onComplete }: { disabled: boolean; loading: boolean; onComplete: () => void }) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const hapticInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completed = useRef(false);
+
+  function stopHaptics() {
+    if (!hapticInterval.current) return;
+    clearInterval(hapticInterval.current);
+    hapticInterval.current = null;
+  }
+
+  useEffect(() => () => stopHaptics(), []);
+
+  function beginHold() {
+    if (disabled || loading) return;
+    completed.current = false;
+    progress.setValue(0);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    stopHaptics();
+    hapticInterval.current = setInterval(() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 210);
+    Animated.timing(progress, { toValue: 1, duration: 1000, useNativeDriver: false }).start(({ finished }) => {
+      stopHaptics();
+      if (!finished || disabled || loading) return;
+      completed.current = true;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onComplete();
+    });
+  }
+
+  function endHold() {
+    stopHaptics();
+    if (completed.current || disabled || loading) return;
+    progress.stopAnimation(() => Animated.timing(progress, { toValue: 0, duration: 160, useNativeDriver: false }).start());
+  }
+
+  return (
+    <Pressable
+      accessibilityHint="Mantén pulsado hasta completar la barra"
+      accessibilityLabel="Enviar collage definitivo"
+      accessibilityRole="button"
+      disabled={disabled || loading}
+      onPressIn={beginHold}
+      onPressOut={endHold}
+      style={({ pressed }) => [styles.submitHold, disabled && styles.submitHoldDisabled, pressed && styles.submitHoldPressed]}
+    >
+      <Animated.View pointerEvents="none" style={[styles.submitHoldProgress, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+      {loading ? <ActivityIndicator color={colors.white} /> : (
+        <View style={styles.submitHoldContent}>
+          <Ionicons color={colors.white} name="finger-print-outline" size={20} />
+          <Text style={styles.submitHoldText}>{disabled ? 'Completa todas las fotos' : 'Mantén pulsado para enviar'}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+export function ChallengeScreen({ challengeId, userId, onBack, onSubmitted }: { challengeId: string; userId: string; onBack: () => void; onSubmitted: () => void }) {
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [votes, setVotes] = useState<Vote[]>([]);
@@ -69,10 +129,39 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
   const [cropImageSize, setCropImageSize] = useState({ width: 0, height: 0 });
   const [cropFrameSize, setCropFrameSize] = useState({ width: 0, height: 0 });
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const [pendingCrop, setPendingCrop] = useState<{ slot: number; uri: string } | null>(null);
   const [viewingParticipant, setViewingParticipant] = useState<Participant | null>(null);
   const [clockTick, setClockTick] = useState(Date.now());
   const cropStart = useRef({ x: 0, y: 0 });
+  const cropImageSizeRef = useRef({ width: 0, height: 0 });
+  const cropFrameSizeRef = useRef({ width: 0, height: 0 });
+  const cropOffsetRef = useRef({ x: 0, y: 0 });
+  const cropPanResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
   const advancedDeadline = useRef<string | null>(null);
+
+  if (!cropPanResponderRef.current) {
+    cropPanResponderRef.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => { cropStart.current = cropOffsetRef.current; },
+      onPanResponderMove: (_event, gesture) => {
+        const frame = cropFrameSizeRef.current;
+        const image = cropImageSizeRef.current;
+        if (!frame.width || !image.width) return;
+        const scale = Math.max(frame.width / image.width, frame.height / image.height);
+        const maxX = Math.max(0, (image.width * scale - frame.width) / 2);
+        const maxY = Math.max(0, (image.height * scale - frame.height) / 2);
+        const next = {
+          x: Math.max(-maxX, Math.min(maxX, cropStart.current.x + gesture.dx)),
+          y: Math.max(-maxY, Math.min(maxY, cropStart.current.y + gesture.dy)),
+        };
+        cropOffsetRef.current = next;
+        setCropOffset(next);
+      },
+      onPanResponderTerminationRequest: () => false,
+    });
+  }
+  const cropPanResponder = cropPanResponderRef.current;
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -96,6 +185,8 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
     return () => { void supabase.removeChannel(channel); };
   }, [challengeId]);
 
+  useEffect(() => subscribeToResync(() => void load(true)), [challengeId, userId]);
+
   useEffect(() => {
     const interval = setInterval(() => setClockTick(Date.now()), 1000);
     return () => clearInterval(interval);
@@ -113,6 +204,21 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
 
   const me = participants.find((participant) => participant.user_id === userId);
   const targetColor = challenge?.mode === 'individual_random' ? me?.assigned_color : challenge?.shared_color;
+  const pendingDraftKey = `collage-draft:${challengeId}:${userId}`;
+
+  useEffect(() => {
+    if (!challenge || !me || challenge.status !== 'active' || me.status !== 'pending') return;
+    void AsyncStorage.getItem(pendingDraftKey).then((stored) => {
+      if (!stored || cropSlot !== null) return;
+      const draft = JSON.parse(stored) as { slot: number; uri: string; width?: number; height?: number };
+      const file = new File(draft.uri);
+      if (!file.exists) {
+        void AsyncStorage.removeItem(pendingDraftKey);
+        return;
+      }
+      openCropSource(draft.slot, draft.uri, true, draft.width, draft.height);
+    }).catch(() => undefined);
+  }, [challenge?.id, challenge?.status, me?.id, me?.status, pendingDraftKey]);
 
   useEffect(() => {
     if (!challenge || !me || !targetColor || challenge.color_selection_mode === 'manual') return;
@@ -166,21 +272,18 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
       await load(true);
       return;
     }
-    setBusy(slot);
-    setError(null);
-    try { await uploadPhoto(me.id, slot, result.assets[0]!.uri); await load(true); }
-    catch (caught) {
-      const message = (caught as Error).message;
-      if (message.startsWith('No has llegado a tiempo')) {
-        Alert.alert('Se acabó el tiempo', 'No has llegado a tiempo para añadir esta foto. Tu collage está cerrado y el reto pasa a la siguiente fase.');
-        if (challenge) await advanceChallenge(challenge.id).catch(() => undefined);
-        await load(true);
-      } else {
-        setError(message);
-      }
+    const asset = result.assets[0]!;
+    let draftUri = asset.uri;
+    try {
+      const draft = new File(Paths.document, `collage-draft-${challengeId}-${userId}.jpg`);
+      if (draft.exists) draft.delete();
+      new File(asset.uri).copy(draft);
+      draftUri = draft.uri;
+    } catch {
+      // Image picker URIs remain usable for the current session if a platform cannot copy them.
     }
-    setBusy(null);
-    setSelectedSlot(null);
+    await AsyncStorage.setItem(pendingDraftKey, JSON.stringify({ slot, uri: draftUri, width: asset.width, height: asset.height })).catch(() => undefined);
+    openCropSource(slot, draftUri, true, asset.width, asset.height);
   }
 
   async function removeSelectedPhoto() {
@@ -194,58 +297,102 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
     setBusy(null);
   }
 
-  function clampCropOffset(next: { x: number; y: number }) {
-    if (!cropFrameSize.width || !cropImageSize.width) return next;
-    const scale = Math.max(cropFrameSize.width / cropImageSize.width, cropFrameSize.height / cropImageSize.height);
-    const scaledWidth = cropImageSize.width * scale;
-    const scaledHeight = cropImageSize.height * scale;
-    const maxX = Math.max(0, (scaledWidth - cropFrameSize.width) / 2);
-    const maxY = Math.max(0, (scaledHeight - cropFrameSize.height) / 2);
-    return {
-      x: Math.max(-maxX, Math.min(maxX, next.x)),
-      y: Math.max(-maxY, Math.min(maxY, next.y)),
-    };
+  function openCropSource(slot: number, uri: string, pending: boolean, width?: number, height?: number) {
+    setSelectedSlot(null);
+    setPendingCrop(pending ? { slot, uri } : null);
+    setCropSlot(slot);
+    setError(null);
+    cropOffsetRef.current = { x: 0, y: 0 };
+    setCropOffset(cropOffsetRef.current);
+    cropImageSizeRef.current = width && height ? { width, height } : { width: 0, height: 0 };
+    setCropImageSize(cropImageSizeRef.current);
+    Image.getSize(uri, (imageWidth, imageHeight) => {
+      cropImageSizeRef.current = { width: imageWidth, height: imageHeight };
+      setCropImageSize(cropImageSizeRef.current);
+    }, () => {
+      if (cropImageSizeRef.current.width) return;
+      cropImageSizeRef.current = { width: 0, height: 0 };
+      setCropImageSize(cropImageSizeRef.current);
+    });
   }
-
-  const cropPanResponder = PanResponder.create({
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: () => { cropStart.current = cropOffset; },
-    onPanResponderMove: (_event, gesture) => {
-      setCropOffset(clampCropOffset({ x: cropStart.current.x + gesture.dx, y: cropStart.current.y + gesture.dy }));
-    },
-  });
 
   function openCropEditor(slot: number) {
     const photo = me?.photos?.find((item) => item.slot_order === slot);
     if (!photo?.photo_url) return;
-    setCropSlot(slot);
-    setCropOffset({ x: 0, y: 0 });
-    Image.getSize(photo.photo_url, (width, height) => setCropImageSize({ width, height }), () => setCropImageSize({ width: 0, height: 0 }));
+    openCropSource(slot, photo.photo_url, false);
+  }
+
+  function closeCropEditor() {
+    setCropSlot(null);
+    if (pendingCrop) {
+      try {
+        const draft = new File(pendingCrop.uri);
+        if (draft.exists) draft.delete();
+      } catch { /* The picker may expose a URI that cannot be managed by FileSystem. */ }
+      void AsyncStorage.removeItem(pendingDraftKey).catch(() => undefined);
+      setPendingCrop(null);
+    }
+    cropImageSizeRef.current = { width: 0, height: 0 };
+    setCropImageSize(cropImageSizeRef.current);
+  }
+
+  function updateCropImageSize(width: number, height: number) {
+    if (!width || !height) return;
+    cropImageSizeRef.current = { width, height };
+    setCropImageSize(cropImageSizeRef.current);
   }
 
   async function saveCrop() {
-    if (!me || cropSlot === null || !cropImageSize.width || !cropFrameSize.width) return;
+    if (!me || cropSlot === null) return;
+    if (!cropImageSize.width || !cropFrameSize.width) {
+      setError('La imagen todavía se está preparando. Inténtalo de nuevo en un momento.');
+      return;
+    }
     const photo = me.photos?.find((item) => item.slot_order === cropSlot);
-    if (!photo) return;
+    const pendingSource = pendingCrop?.slot === cropSlot ? pendingCrop.uri : null;
+    const originalUri = pendingSource ?? photo?.photo_url;
+    if (!originalUri) return;
     const scale = Math.max(cropFrameSize.width / cropImageSize.width, cropFrameSize.height / cropImageSize.height);
     const displayedWidth = cropImageSize.width * scale;
     const displayedHeight = cropImageSize.height * scale;
     const imageLeft = (cropFrameSize.width - displayedWidth) / 2 + cropOffset.x;
     const imageTop = (cropFrameSize.height - displayedHeight) / 2 + cropOffset.y;
+    const originX = Math.max(0, Math.round(-imageLeft / scale));
+    const originY = Math.max(0, Math.round(-imageTop / scale));
     const crop = {
-      originX: Math.max(0, Math.round(-imageLeft / scale)),
-      originY: Math.max(0, Math.round(-imageTop / scale)),
-      width: Math.min(cropImageSize.width, Math.round(cropFrameSize.width / scale)),
-      height: Math.min(cropImageSize.height, Math.round(cropFrameSize.height / scale)),
+      originX,
+      originY,
+      width: Math.max(1, Math.min(cropImageSize.width - originX, Math.round(cropFrameSize.width / scale))),
+      height: Math.max(1, Math.min(cropImageSize.height - originY, Math.round(cropFrameSize.height / scale))),
     };
+    let downloadedPhoto: File | null = null;
     setBusy(cropSlot);
+    setError(null);
     try {
-      const result = await ImageManipulator.manipulateAsync(photo.photo_url, [{ crop }], { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG });
+      let sourceUri = originalUri;
+      if (/^https?:\/\//.test(sourceUri)) {
+        const destination = new File(Paths.cache, `collage-crop-${photo?.id ?? cropSlot}.jpg`);
+        await File.downloadFileAsync(sourceUri, destination, { idempotent: true });
+        downloadedPhoto = destination;
+        sourceUri = destination.uri;
+      }
+      const result = await ImageManipulator.manipulateAsync(sourceUri, [{ crop }], { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG });
       await uploadPhoto(me.id, cropSlot, result.uri);
       await load(true);
       setCropSlot(null);
+      if (pendingCrop) {
+        try {
+          const draft = new File(pendingCrop.uri);
+          if (draft.exists) draft.delete();
+        } catch { /* The picker may expose a URI that cannot be managed by FileSystem. */ }
+        void AsyncStorage.removeItem(pendingDraftKey).catch(() => undefined);
+        setPendingCrop(null);
+      }
       setSelectedSlot(null);
     } catch (caught) { setError((caught as Error).message); }
+    finally {
+      if (downloadedPhoto?.exists) downloadedPhoto.delete();
+    }
     setBusy(null);
   }
 
@@ -259,15 +406,20 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
 
   async function finalize() {
     if (!me) return;
-    Alert.alert('¿Collage definitivo?', 'Después de enviarlo no podrás cambiar las fotos.', [
-      { text: 'Seguir editando', style: 'cancel' },
-      { text: 'Enviar', onPress: async () => {
-        setBusy('submit');
-        try { await submitCollage(me.id); await load(true); }
-        catch (caught) { setError((caught as Error).message); }
-        setBusy(null);
-      } },
-    ]);
+    setBusy('submit');
+    setError(null);
+    try { await submitCollage(me.id); onSubmitted(); await load(true); }
+    catch (caught) {
+      try {
+        const latest = await getChallenge(challengeId, userId);
+        const submissionReachedServer = latest.participants.some((participant) => participant.id === me.id && participant.status === 'submitted');
+        if (submissionReachedServer) {
+          onSubmitted();
+          await load(true);
+        } else setError((caught as Error).message);
+      } catch { setError((caught as Error).message); }
+    }
+    setBusy(null);
   }
 
   async function vote(participantId: string) {
@@ -334,7 +486,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
 
   if (challenge.status === 'active' && me.status === 'pending') {
     return (
-      <Screen>
+      <Screen bottomInset={28}>
         <Header title="Tu reto" onBack={onBack} />
         {revealModal}
         <View style={styles.challengeHeading}>
@@ -350,7 +502,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
               <Pressable key={slot} onPress={() => photo ? setSelectedSlot(slot) : photoAction(slot)} style={({ pressed }) => [styles.editSlot, { width: `${100 / layout.columns}%`, height: `${100 / layout.rows}%` }, pressed && styles.pressedSlot]}>
                 {photo?.photo_url ? <Image resizeMode="cover" source={{ uri: photo.photo_url }} style={styles.editImage} /> : (
                   <View style={styles.emptySlotContent}>
-                    <Ionicons color={colors.ink} name="camera-outline" size={28} />
+                    <Ionicons color={colors.muted} name="camera-outline" size={28} />
                     <Text style={styles.emptySlotText}>Añadir</Text>
                   </View>
                 )}
@@ -366,8 +518,12 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
         <Text style={styles.progress}>{completed} de {photoCount} fotos listas</Text>
         <ErrorText message={error} />
         <View style={styles.actionStack}>
-          <Button label="Ver collage completo" onPress={() => setPreviewOpen(true)} variant="secondary" disabled={completed === 0} />
-          <Button label="Enviar collage definitivo" onPress={finalize} disabled={completed !== photoCount} loading={busy === 'submit'} />
+          <Pressable disabled={completed === 0} onPress={() => setPreviewOpen(true)} style={({ pressed }) => [styles.previewAction, completed === 0 && styles.submitHoldDisabled, pressed && styles.previewActionPressed]}>
+            <View style={styles.previewActionIcon}><Ionicons color={colors.ink} name="images-outline" size={20} /></View>
+            <Text style={styles.previewActionText}>Ver collage completo</Text>
+            <Ionicons color={colors.muted} name="arrow-forward" size={19} />
+          </Pressable>
+          <HoldToSubmit disabled={completed !== photoCount} loading={busy === 'submit'} onComplete={() => void finalize()} />
         </View>
         <Modal animationType="fade" transparent visible={previewOpen} onRequestClose={() => setPreviewOpen(false)}>
           <View style={styles.previewRoot}>
@@ -381,9 +537,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
               <View style={styles.previewStage}>
                 <View style={styles.previewHalo} />
                 <View style={styles.previewFrame}>
-                  <View style={styles.previewChrome}><View style={styles.previewChromeDot} /><View style={[styles.previewChromeDot, styles.previewChromeDotMuted]} /><View style={[styles.previewChromeDot, styles.previewChromeDotDark]} /></View>
                   <Collage participant={me} photoCount={photoCount} showSlotNumbers style={styles.previewCollage} />
-                  <View style={styles.previewBadge}><Ionicons color={colors.ink} name="sparkles-outline" size={15} /><Text style={styles.previewBadgeText}>Final</Text></View>
                 </View>
               </View>
               <View style={styles.previewFooter}>
@@ -403,40 +557,66 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
                 <View style={styles.photoDetailCard}>
                   <Image source={{ uri: photo.photo_url }} style={styles.photoDetailImage} />
                   <View style={styles.photoDetailActions}>
-                    <Button label="Cambiar encuadre" onPress={() => openCropEditor(selectedSlot)} variant="secondary" />
-                    <Button label="Nueva foto" onPress={() => photoAction(selectedSlot)} variant="secondary" />
-                    <Button label="Borrar foto" onPress={removeSelectedPhoto} loading={busy === selectedSlot} variant="danger" />
+                    <Pressable onPress={() => openCropEditor(selectedSlot)} style={({ pressed }) => [styles.photoAction, styles.photoActionCrop, pressed && styles.photoActionPressed]}>
+                      <View style={styles.photoActionIcon}><Ionicons color={colors.ink} name="crop-outline" size={20} /></View>
+                      <Text style={styles.photoActionText}>Cambiar encuadre</Text>
+                      <Ionicons color={colors.ink} name="chevron-forward" size={18} />
+                    </Pressable>
+                    <Pressable onPress={() => photoAction(selectedSlot)} style={({ pressed }) => [styles.photoAction, styles.photoActionReplace, pressed && styles.photoActionPressed]}>
+                      <View style={styles.photoActionIcon}><Ionicons color={colors.ink} name="camera-outline" size={20} /></View>
+                      <Text style={styles.photoActionText}>Nueva foto</Text>
+                      <Ionicons color={colors.ink} name="chevron-forward" size={18} />
+                    </Pressable>
+                    <Pressable disabled={busy === selectedSlot} onPress={() => void removeSelectedPhoto()} style={({ pressed }) => [styles.photoAction, styles.photoActionDelete, busy === selectedSlot && styles.submitHoldDisabled, pressed && styles.photoActionPressed]}>
+                      <View style={styles.photoActionIcon}><Ionicons color={colors.danger} name="trash-outline" size={20} /></View>
+                      <Text style={[styles.photoActionText, styles.photoActionDeleteText]}>Borrar foto</Text>
+                      {busy === selectedSlot ? <ActivityIndicator color={colors.danger} size="small" /> : <Ionicons color={colors.danger} name="chevron-forward" size={18} />}
+                    </Pressable>
                   </View>
-                  <Button label="Cerrar" onPress={() => setSelectedSlot(null)} variant="quiet" />
+                  <Pressable onPress={() => setSelectedSlot(null)} style={({ pressed }) => [styles.photoDetailClose, pressed && styles.photoActionPressed]}>
+                    <Text style={styles.photoDetailCloseText}>Cerrar</Text>
+                  </Pressable>
                 </View>
               ) : null;
             })()}
           </View>
         </Modal>
-        <Modal animationType="fade" transparent visible={cropSlot !== null} onRequestClose={() => setCropSlot(null)}>
+        <Modal animationType="fade" transparent visible={cropSlot !== null} onRequestClose={closeCropEditor}>
           <View style={styles.cropRoot}>
             <View style={styles.cropHeader}>
               <Text style={styles.previewTitle}>Ajusta el encuadre</Text>
-              <Pressable onPress={() => setCropSlot(null)} style={styles.previewClose}><Ionicons color={colors.white} name="close" size={22} /></Pressable>
+              <Pressable onPress={closeCropEditor} style={styles.previewClose}><Ionicons color={colors.white} name="close" size={22} /></Pressable>
             </View>
             {cropSlot !== null && (() => {
               const photo = me.photos?.find((item) => item.slot_order === cropSlot);
+              const sourceUri = pendingCrop?.slot === cropSlot ? pendingCrop.uri : photo?.photo_url;
               const scale = cropFrameSize.width && cropImageSize.width ? Math.max(cropFrameSize.width / cropImageSize.width, cropFrameSize.height / cropImageSize.height) : 1;
               const imageStyle = cropImageSize.width ? {
                 width: cropImageSize.width * scale,
                 height: cropImageSize.height * scale,
                 transform: [{ translateX: cropOffset.x }, { translateY: cropOffset.y }],
               } : undefined;
-              return photo ? (
+              return sourceUri ? (
                 <View style={styles.cropContent}>
-                  <View onLayout={(event) => setCropFrameSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })} style={[styles.cropFrame, { aspectRatio: layout.slotAspectRatio }]} {...cropPanResponder.panHandlers}>
-                    <Image source={{ uri: photo.photo_url }} style={[styles.cropImage, imageStyle]} />
+                  <View onLayout={(event) => {
+                    cropFrameSizeRef.current = { width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height };
+                    setCropFrameSize(cropFrameSizeRef.current);
+                  }} style={[styles.cropFrame, { aspectRatio: layout.slotAspectRatio }]} {...cropPanResponder.panHandlers}>
+                    <Image onLoad={(event) => {
+                      const { width, height } = event.nativeEvent.source;
+                      updateCropImageSize(width, height);
+                    }} source={{ uri: sourceUri }} style={[styles.cropImage, imageStyle]} />
                     <View pointerEvents="none" style={styles.cropGuide} />
                   </View>
                   <Text style={styles.cropHint}>Arrastra la foto para decidir qué parte se verá en el collage.</Text>
+                  <ErrorText message={error} />
                   <View style={styles.actionStack}>
-                    <Button label="Guardar encuadre" onPress={saveCrop} loading={busy === cropSlot} />
-                    <Button label="Cancelar" onPress={() => setCropSlot(null)} variant="quiet" />
+                    <Pressable disabled={busy === cropSlot} onPress={() => void saveCrop()} style={({ pressed }) => [styles.cropSave, busy === cropSlot && styles.submitHoldDisabled, pressed && styles.photoActionPressed]}>
+                      {busy === cropSlot ? <ActivityIndicator color={colors.ink} /> : <><Ionicons color={colors.ink} name="checkmark-circle-outline" size={21} /><Text style={styles.cropSaveText}>Guardar encuadre</Text></>}
+                    </Pressable>
+                    <Pressable disabled={busy === cropSlot} onPress={closeCropEditor} style={({ pressed }) => [styles.cropCancel, pressed && styles.photoActionPressed]}>
+                      <Text style={styles.cropCancelText}>Cancelar</Text>
+                    </Pressable>
                   </View>
                 </View>
               ) : null;
@@ -449,7 +629,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
 
   if (challenge.status === 'active' || challenge.status === 'configuring') {
     return (
-      <Screen>
+      <Screen bottomInset={28} stickyHeader>
         <Header title="Esperando" onBack={onBack} />
         {revealModal}
         <View style={styles.waitingHero}>
@@ -460,7 +640,7 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
           <View style={styles.waitingHeroCopy}>
             <Text style={styles.waitingKicker}>COLLAGE ENVIADO</Text>
             <Title size="medium">Ya está en juego</Title>
-            <Body>Tu collage está cerrado. La votación empezará cuando termine el tiempo.</Body>
+            <Body>Tu collage está cerrado. La votación empezará cuando todos hayan enviado o termine el tiempo.</Body>
           </View>
         </View>
 
@@ -516,9 +696,17 @@ export function ChallengeScreen({ challengeId, userId, onBack }: { challengeId: 
               </View>
               <View style={styles.doneBadge}><Ionicons color={colors.ink} name="checkmark" size={17} /></View>
             </View>
-            <Collage participant={me} photoCount={photoCount} />
+            <Pressable accessibilityLabel="Ampliar tu collage" accessibilityRole="button" onPress={() => setViewingParticipant(me)} style={({ pressed }) => [styles.ownCollageWrap, pressed && styles.pressedSlot]}>
+              <Collage participant={me} photoCount={photoCount} style={styles.ownCollage} />
+              <View style={styles.expandBadge}><Ionicons color={colors.white} name="expand-outline" size={17} /><Text style={styles.expandText}>Ver en grande</Text></View>
+            </Pressable>
           </Card>
         )}
+        <Modal animationType="fade" visible={viewingParticipant !== null} onRequestClose={() => setViewingParticipant(null)}>
+          <Pressable accessibilityLabel="Cerrar collage" accessibilityRole="button" onPress={() => setViewingParticipant(null)} style={styles.collageViewer}>
+            {viewingParticipant && <Collage participant={viewingParticipant} photoCount={photoCount} style={styles.viewerCollage} />}
+          </Pressable>
+        </Modal>
       </Screen>
     );
   }
@@ -662,11 +850,11 @@ const styles = StyleSheet.create({
   headingText: { flex: 1 },
   bigSwatch: { width: 72, height: 72, borderRadius: 24, borderWidth: 6, borderColor: '#FFFFFF88' },
   editGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', marginTop: 24, marginBottom: 12, overflow: 'hidden' },
-  editSlot: { width: '50%', backgroundColor: colors.blue, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  editSlot: { width: '50%', backgroundColor: colors.surface, borderWidth: 0.5, borderColor: colors.line, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   pressedSlot: { opacity: 0.78, transform: [{ scale: 0.99 }] },
   editImage: { position: 'absolute', inset: 0 },
   emptySlotContent: { alignItems: 'center', gap: 8 },
-  emptySlotText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
+  emptySlotText: { color: colors.muted, fontSize: 13, fontWeight: '800' },
   slotNumber: { position: 'absolute', left: 12, top: 12, color: colors.ink, backgroundColor: '#FFFFFF99', borderRadius: 14, overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 5, fontSize: 12, fontWeight: '900' },
   slotNumberFilled: { color: colors.white, backgroundColor: '#111217AA' },
   imageLoader: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#00000066', alignItems: 'center', justifyContent: 'center' },
@@ -675,6 +863,16 @@ const styles = StyleSheet.create({
   progressDotDone: { width: 22, backgroundColor: colors.ink },
   progress: { textAlign: 'center', color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 14 },
   actionStack: { gap: 10 },
+  previewAction: { minHeight: 60, borderRadius: 22, paddingHorizontal: 14, backgroundColor: colors.lavender, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  previewActionPressed: { opacity: 0.76, transform: [{ translateY: 1 }] },
+  previewActionIcon: { width: 36, height: 36, borderRadius: 13, backgroundColor: '#FFFFFF66', alignItems: 'center', justifyContent: 'center' },
+  previewActionText: { flex: 1, color: colors.ink, fontSize: 15, fontWeight: '900' },
+  submitHold: { minHeight: 60, borderRadius: 22, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  submitHoldDisabled: { opacity: 0.42 },
+  submitHoldPressed: { transform: [{ translateY: 1 }] },
+  submitHoldProgress: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.cobalt },
+  submitHoldContent: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  submitHoldText: { color: colors.white, fontSize: 15, fontWeight: '900' },
   previewRoot: { flex: 1, backgroundColor: colors.ink, paddingHorizontal: 18, paddingTop: 112 },
   previewHeader: { position: 'absolute', top: 54, left: 18, right: 18, zIndex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   previewKicker: { color: colors.green, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 3 },
@@ -683,14 +881,8 @@ const styles = StyleSheet.create({
   previewContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 38, gap: 14 },
   previewStage: { alignItems: 'center', justifyContent: 'center' },
   previewHalo: { position: 'absolute', width: '82%', aspectRatio: 0.58, borderRadius: 46, backgroundColor: colors.lavender, opacity: 0.22, transform: [{ rotate: '-5deg' }] },
-  previewFrame: { width: '86%', borderRadius: 30, paddingTop: 38, shadowColor: '#000000', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.42, shadowRadius: 26, elevation: 14 },
-  previewChrome: { position: 'absolute', top: 14, left: 16, flexDirection: 'row', gap: 5 },
-  previewChromeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.orange },
-  previewChromeDotMuted: { backgroundColor: colors.green },
-  previewChromeDotDark: { backgroundColor: colors.ink },
+  previewFrame: { width: '86%', borderRadius: 30, shadowColor: '#000000', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.42, shadowRadius: 26, elevation: 14 },
   previewCollage: { marginBottom: 0, borderRadius: 22, overflow: 'hidden', backgroundColor: colors.ink },
-  previewBadge: { position: 'absolute', right: 16, top: 10, minHeight: 27, borderRadius: 14, paddingHorizontal: 10, backgroundColor: colors.yellow, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  previewBadgeText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
   previewFooter: { flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap' },
   previewChip: { minHeight: 42, borderRadius: 21, paddingHorizontal: 13, backgroundColor: '#FFFFFF12', flexDirection: 'row', alignItems: 'center', gap: 8 },
   previewChipText: { color: colors.white, fontSize: 12, fontWeight: '800' },
@@ -700,9 +892,19 @@ const styles = StyleSheet.create({
   previewMissing: { backgroundColor: '#2A2A2D', alignItems: 'center', justifyContent: 'center' },
   previewSlot: { color: colors.white, opacity: 0.45, fontSize: 28, fontWeight: '900' },
   photoDetailRoot: { flex: 1, backgroundColor: '#000000DD', padding: 18, justifyContent: 'center' },
-  photoDetailCard: { gap: 12 },
-  photoDetailImage: { width: '100%', aspectRatio: 0.78, borderRadius: 30, backgroundColor: colors.ink },
-  photoDetailActions: { flexDirection: 'row', gap: 10 },
+  photoDetailCard: { width: '100%', padding: 12, borderRadius: 32, backgroundColor: colors.paper, gap: 10 },
+  photoDetailImage: { width: '100%', aspectRatio: 0.92, borderRadius: 24, backgroundColor: colors.ink },
+  photoDetailActions: { width: '100%', gap: 8 },
+  photoAction: { width: '100%', minHeight: 56, borderRadius: 19, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  photoActionCrop: { backgroundColor: colors.lavender },
+  photoActionReplace: { backgroundColor: colors.yellow },
+  photoActionDelete: { backgroundColor: '#F6D9D6' },
+  photoActionPressed: { opacity: 0.72, transform: [{ translateY: 1 }] },
+  photoActionIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: '#FFFFFF77', alignItems: 'center', justifyContent: 'center' },
+  photoActionText: { flex: 1, color: colors.ink, fontSize: 14, fontWeight: '900' },
+  photoActionDeleteText: { color: colors.danger },
+  photoDetailClose: { minHeight: 44, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink },
+  photoDetailCloseText: { color: colors.white, fontSize: 14, fontWeight: '900' },
   cropRoot: { flex: 1, backgroundColor: '#000000E8', padding: 18, paddingTop: 74, justifyContent: 'center' },
   cropHeader: { position: 'absolute', top: 54, left: 18, right: 18, zIndex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cropContent: { gap: 16 },
@@ -710,6 +912,10 @@ const styles = StyleSheet.create({
   cropImage: { position: 'absolute' },
   cropGuide: { ...StyleSheet.absoluteFillObject, borderWidth: 2, borderColor: '#FFFFFFAA' },
   cropHint: { color: colors.white, opacity: 0.72, textAlign: 'center', fontSize: 13, lineHeight: 18 },
+  cropSave: { minHeight: 58, borderRadius: 21, backgroundColor: colors.yellow, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  cropSaveText: { color: colors.ink, fontSize: 15, fontWeight: '900' },
+  cropCancel: { minHeight: 48, borderRadius: 18, backgroundColor: '#FFFFFF18', alignItems: 'center', justifyContent: 'center' },
+  cropCancelText: { color: colors.white, fontSize: 14, fontWeight: '800' },
   waitingHero: { minHeight: 220, padding: 22, borderRadius: 30, backgroundColor: colors.lavender, justifyContent: 'space-between', gap: 28, marginTop: 18, marginBottom: 14, overflow: 'hidden' },
   waitingHeroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   waitingDoneIcon: { width: 44, height: 44, borderRadius: 16, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
@@ -746,6 +952,8 @@ const styles = StyleSheet.create({
   ownCollageHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   ownCollageTitle: { color: colors.ink, fontSize: 18, fontWeight: '900' },
   ownCollageMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  ownCollageWrap: { position: 'relative', overflow: 'hidden', borderRadius: 18, backgroundColor: colors.ink },
+  ownCollage: { marginBottom: 0 },
   doneBadge: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   notice: { marginBottom: 16, backgroundColor: colors.yellow, borderWidth: 0 },
   votingHero: { minHeight: 180, marginTop: 18, borderRadius: 30, padding: 22, backgroundColor: colors.yellow, justifyContent: 'flex-end' },

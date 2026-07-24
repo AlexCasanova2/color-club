@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type PropsWithChildren, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, AppState, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { StatusBar } from 'expo-status-bar';
 import { FloatingMenu, type MenuTab } from '@/components/FloatingMenu';
-import { Body, Button, Card, Screen, Title } from '@/components/ui';
+import { Body, Button, Card, Screen, SuccessModal, Title } from '@/components/ui';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { getUnreadNotificationCount, markNotificationRead } from '@/lib/api';
 import { registerForPushNotifications } from '@/lib/pushNotifications';
+import { clearReadCache, requestResync, subscribeToCachedFallback } from '@/lib/resilience';
 import { colors } from '@/lib/theme';
 import { AuthScreen } from '@/screens/AuthScreen';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
@@ -116,6 +118,11 @@ export default function App() {
   const [accountToast, setAccountToast] = useState<string | null>(null);
   const [notificationToast, setNotificationToast] = useState<AppNotification | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [collageSubmitted, setCollageSubmitted] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [connectionRestored, setConnectionRestored] = useState(false);
+  const [usingCachedData, setUsingCachedData] = useState(false);
+  const wasOffline = useRef(false);
 
   async function unlockWithFaceId() {
     setBiometricLoading(true);
@@ -159,6 +166,7 @@ export default function App() {
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       if (!nextSession) {
+        void clearReadCache().catch(() => undefined);
         setBiometricUnlocked(false);
         setBiometricError(null);
         setRoute({ name: 'home' });
@@ -167,6 +175,45 @@ export default function App() {
       }
     });
     return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    let restoredTimeout: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const online = state.isConnected !== false && state.isInternetReachable !== false;
+      setIsOffline(!online);
+      if (wasOffline.current && online) {
+        requestResync();
+        setConnectionRestored(true);
+        if (restoredTimeout) clearTimeout(restoredTimeout);
+        restoredTimeout = setTimeout(() => setConnectionRestored(false), 2800);
+      }
+      wasOffline.current = !online;
+    });
+    return () => {
+      unsubscribe();
+      if (restoredTimeout) clearTimeout(restoredTimeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && !isOffline) requestResync();
+    });
+    return () => subscription.remove();
+  }, [isOffline]);
+
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeToCachedFallback(() => {
+      setUsingCachedData(true);
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => setUsingCachedData(false), 4500);
+    });
+    return () => {
+      unsubscribe();
+      if (timeout) clearTimeout(timeout);
+    };
   }, []);
 
   useEffect(() => {
@@ -244,6 +291,7 @@ export default function App() {
         challengeId={route.challengeId}
         userId={session.user.id}
         onBack={() => setRoute({ name: 'club', clubId: route.clubId })}
+        onSubmitted={() => setCollageSubmitted(true)}
       />
     );
   } else {
@@ -252,7 +300,7 @@ export default function App() {
 
   const activeTab: MenuTab = route.name === 'activity' ? 'activity' : route.name === 'friends' ? 'friends' : route.name === 'account' ? 'account' : 'clubs';
   const routeKey = route.name === 'club' || route.name === 'club-chat' || route.name === 'club-manage' || route.name === 'new-challenge' ? `${route.name}-${route.clubId}` : route.name === 'challenge' ? `${route.name}-${route.challengeId}` : route.name === 'public-profile' ? `${route.name}-${route.userId}` : route.name;
-  const showFloatingMenu = !['club-chat', 'club-manage', 'new-challenge', 'edit-profile'].includes(route.name);
+  const showFloatingMenu = !['club-chat', 'club-manage', 'new-challenge', 'challenge', 'edit-profile'].includes(route.name);
   async function openNotification(notification: AppNotification) {
     setNotificationToast(null);
     if (!notification.read_at) {
@@ -277,6 +325,19 @@ export default function App() {
       <StatusBar style="dark" />
       <RouteTransition routeKey={routeKey}>{content}</RouteTransition>
       {showFloatingMenu && <FloatingMenu active={activeTab} onSelect={selectTab} notificationCount={unreadNotifications} />}
+      {(isOffline || connectionRestored || usingCachedData) && (
+        <View pointerEvents="none" style={[styles.connectionBanner, connectionRestored && styles.connectionBannerOnline]}>
+          <Ionicons color={colors.ink} name={connectionRestored ? 'cloud-done-outline' : isOffline ? 'cloud-offline-outline' : 'cloud-outline'} size={17} />
+          <Text style={styles.connectionBannerText}>{connectionRestored ? 'Conexión recuperada · sincronizando' : isOffline ? 'Sin conexión · mostrando datos guardados' : 'Conexión inestable · mostrando datos guardados'}</Text>
+        </View>
+      )}
+      <SuccessModal
+        actionLabel="Ir al reto"
+        body="Tu collage ya está enviado y bloqueado. Puedes entrar para seguir el progreso del club."
+        onAction={() => setCollageSubmitted(false)}
+        title="Collage enviado con éxito"
+        visible={collageSubmitted}
+      />
       <Modal animationType="fade" transparent visible={notificationToast !== null}>
         <View pointerEvents="box-none" style={styles.notificationLayer}>
           <Pressable onPress={() => notificationToast && void openNotification(notificationToast)} style={styles.notificationToast}>
@@ -299,6 +360,9 @@ const styles = StyleSheet.create({
   notificationCopy: { flex: 1, gap: 2 },
   notificationTitle: { color: colors.ink, fontSize: 14, fontWeight: '900' },
   notificationBody: { color: colors.muted, fontSize: 12, lineHeight: 16 },
+  connectionBanner: { position: 'absolute', zIndex: 50, elevation: 20, top: 58, left: 28, right: 28, minHeight: 42, paddingHorizontal: 14, borderRadius: 18, backgroundColor: colors.yellow, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, shadowColor: colors.ink, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.16, shadowRadius: 12 },
+  connectionBannerOnline: { backgroundColor: colors.green },
+  connectionBannerText: { color: colors.ink, fontSize: 12, fontWeight: '900' },
   setup: { flex: 1, justifyContent: 'center', gap: 25 },
   mark: { flexDirection: 'row', gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },

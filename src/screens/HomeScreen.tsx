@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Body, Button, ErrorText, Field, Screen, SkeletonBlock, Title } from '@/components/ui';
+import * as Haptics from 'expo-haptics';
+import { Body, ErrorText, Field, Screen, SkeletonBlock, Title } from '@/components/ui';
 import { advanceChallenge, createClub, getHomeDashboard, joinClub } from '@/lib/api';
+import { clubColorChoices, clubIconChoices, resolveClubIcon } from '@/lib/clubIdentity';
 import { colors } from '@/lib/theme';
-import type { Challenge, Club, Profile } from '@/types/domain';
+import { subscribeToResync } from '@/lib/resilience';
+import type { Challenge, Club, ClubIcon, Profile } from '@/types/domain';
 
 const cardColors = [colors.orange, colors.blue, colors.pink, colors.green, colors.lavender];
 
@@ -12,7 +15,7 @@ type HomeDashboard = {
   userId: string;
   clubs: Club[];
   profile: Profile;
-  challenge: (Challenge & { club_name: string; is_accessible: boolean }) | null;
+  challenge: (Challenge & { club_name: string; club_theme_color: string; club_icon: ClubIcon; is_accessible: boolean }) | null;
 };
 
 let cachedDashboard: HomeDashboard | null = null;
@@ -35,15 +38,71 @@ function HomeSkeleton() {
   );
 }
 
+function HoldCreateClubButton({ color, disabled, loading, onComplete }: { color: string; disabled: boolean; loading: boolean; onComplete: () => void }) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const completed = useRef(false);
+  const hapticInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function stopHaptics() {
+    if (!hapticInterval.current) return;
+    clearInterval(hapticInterval.current);
+    hapticInterval.current = null;
+  }
+
+  useEffect(() => () => stopHaptics(), []);
+
+  function beginHold() {
+    if (disabled || loading) return;
+    completed.current = false;
+    progress.setValue(0);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    stopHaptics();
+    hapticInterval.current = setInterval(() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 210);
+    Animated.timing(progress, { toValue: 1, duration: 1100, useNativeDriver: false }).start(({ finished }) => {
+      stopHaptics();
+      if (!finished || disabled || loading) return;
+      completed.current = true;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onComplete();
+    });
+  }
+
+  function endHold() {
+    stopHaptics();
+    if (completed.current || disabled || loading) return;
+    progress.stopAnimation(() => Animated.timing(progress, { toValue: 0, duration: 170, useNativeDriver: false }).start());
+  }
+
+  return (
+    <Pressable
+      accessibilityHint="Mantén pulsado hasta completar la barra"
+      accessibilityLabel="Crear club"
+      accessibilityRole="button"
+      disabled={disabled || loading}
+      onPressIn={beginHold}
+      onPressOut={endHold}
+      style={({ pressed }) => [styles.sheetPrimaryAction, (disabled || loading) && styles.sheetActionDisabled, pressed && styles.sheetActionPressed]}
+    >
+      <Animated.View pointerEvents="none" style={[styles.sheetHoldProgress, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+      {loading ? <ActivityIndicator color={colors.white} /> : <>
+        <View style={styles.sheetActionCopy}><Text style={styles.sheetActionKicker}>Mantén pulsado</Text><Text style={styles.sheetPrimaryText}>Crear club</Text></View>
+        <View style={[styles.sheetActionArrow, { backgroundColor: color }]}><Ionicons color={colors.ink} name="arrow-forward" size={21} /></View>
+      </>}
+    </Pressable>
+  );
+}
+
 export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: string; onOpenClub: (id: string) => void; onOpenChallenge: (clubId: string, challengeId: string) => void }) {
   const initialDashboard = cachedDashboard?.userId === userId ? cachedDashboard : null;
   const [clubs, setClubs] = useState<Club[]>(initialDashboard?.clubs ?? []);
   const [profile, setProfile] = useState<Profile | null>(initialDashboard?.profile ?? null);
-  const [challenge, setChallenge] = useState<(Challenge & { club_name: string; is_accessible: boolean }) | null>(initialDashboard?.challenge ?? null);
+  const [challenge, setChallenge] = useState<(Challenge & { club_name: string; club_theme_color: string; club_icon: ClubIcon; is_accessible: boolean }) | null>(initialDashboard?.challenge ?? null);
   const [loading, setLoading] = useState(!initialDashboard);
   const [modal, setModal] = useState<'create' | 'join' | null>(null);
   const [value, setValue] = useState('');
   const [monthly, setMonthly] = useState(false);
+  const [clubColor, setClubColor] = useState(clubColorChoices[0]!.hex);
+  const [clubIcon, setClubIcon] = useState<ClubIcon>(clubIconChoices[0]!.value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clockTick, setClockTick] = useState(Date.now());
@@ -64,6 +123,7 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
   }
 
   useEffect(() => { void load(!cachedDashboard || cachedDashboard.userId !== userId); }, [userId]);
+  useEffect(() => subscribeToResync(() => void load(false)), [userId]);
 
   useEffect(() => {
     const interval = setInterval(() => setClockTick(Date.now()), 1000);
@@ -102,6 +162,10 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
 
   function open(kind: 'create' | 'join') {
     setValue('');
+    if (kind === 'create') {
+      setClubColor(clubColorChoices[0]!.hex);
+      setClubIcon(clubIconChoices[0]!.value);
+    }
     setError(null);
     setModal(kind);
   }
@@ -122,11 +186,11 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
   }
 
   async function save() {
-    if (!value.trim()) return;
+    if (!value.trim() || (modal === 'create' && value.trim().length < 2)) return;
     setSaving(true);
     setError(null);
     try {
-      const id = modal === 'create' ? await createClub(value.trim(), monthly) : await joinClub(value.trim());
+      const id = modal === 'create' ? await createClub(value.trim(), monthly, clubColor, clubIcon) : await joinClub(value.trim());
       setModal(null);
       await load(true);
       onOpenClub(id);
@@ -137,6 +201,7 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
   const date = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'short' }).format(new Date());
   const firstName = profile?.display_name.split(' ')[0] ?? 'Colorista';
   const challengeLocked = Boolean(challenge && !challenge.is_accessible);
+  const modalValueValid = modal === 'create' ? value.trim().length >= 2 : Boolean(value.trim());
 
   return (
     <Screen>
@@ -151,10 +216,10 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
           <Pressable
             disabled={!challenge || challengeLocked}
             onPress={() => challenge && onOpenChallenge(challenge.club_id, challenge.id)}
-            style={({ pressed }) => [styles.challengeHero, challengeLocked && styles.challengeHeroLocked, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.challengeHero, challenge?.club_theme_color && { backgroundColor: challenge.club_theme_color }, challengeLocked && styles.challengeHeroLocked, pressed && styles.pressed]}
           >
             <View style={styles.heroCopy}>
-              <Text style={styles.heroKicker}>{challenge ? challenge.club_name : 'Color Club'}</Text>
+              <View style={styles.heroKickerRow}>{challenge && <Ionicons color={colors.ink} name={resolveClubIcon(challenge.club_icon)} size={17} />}<Text style={styles.heroKicker}>{challenge ? challenge.club_name : 'Color Club'}</Text></View>
               <Text style={styles.heroTitle}>{challengeLocked ? 'Retos en\ntus clubs' : challenge ? (challenge.status === 'voting' ? 'Hora de\nvotar' : 'Reto\nen curso') : 'Tu próximo\nreto empieza aquí'}</Text>
               <Text style={styles.heroMeta}>{challengeLocked ? 'Hay un reto activo, pero empezó antes de que entraras. Si otro club lanza uno nuevo, aparecerá aquí.' : challenge ? (challenge.status === 'voting' && challenge.voting_ends_at ? `${timeLeft(challenge.voting_ends_at)} para votar` : `${timeLeft(challenge.ends_at)} para completar ${challenge.photo_count ?? 6} fotos`) : 'Crea un club e invita a tus amigos'}</Text>
               {challenge && <Text style={styles.heroLink}>{challengeLocked ? 'Esperando próximo reto' : 'Abrir reto  →'}</Text>}
@@ -174,8 +239,8 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
           ) : (
             <View style={styles.clubGrid}>
               {clubs.map((club, index) => (
-                <Pressable key={club.id} onPress={() => onOpenClub(club.id)} style={({ pressed }) => [styles.clubCard, { backgroundColor: cardColors[index % cardColors.length] }, index % 3 === 0 && styles.clubCardWide, pressed && styles.pressed]}>
-                  <View style={styles.clubBadge}><Text style={styles.clubBadgeText}>Club {String(index + 1).padStart(2, '0')}</Text></View>
+                <Pressable key={club.id} onPress={() => onOpenClub(club.id)} style={({ pressed }) => [styles.clubCard, { backgroundColor: club.theme_color || cardColors[index % cardColors.length] }, index % 3 === 0 && styles.clubCardWide, pressed && styles.pressed]}>
+                  <View style={styles.clubBadge}><Ionicons color={colors.ink} name={resolveClubIcon(club.icon)} size={18} /><Text style={styles.clubBadgeText}>Club {String(index + 1).padStart(2, '0')}</Text></View>
                   <Text style={styles.clubName}>{club.name}</Text>
                   <View style={styles.clubFooter}><Text style={styles.clubCode}>{club.invite_code}</Text><View style={styles.arrowCircle}><Ionicons name="arrow-forward" size={16} color={colors.ink} /></View></View>
                 </Pressable>
@@ -194,19 +259,36 @@ export function HomeScreen({ userId, onOpenClub, onOpenChallenge }: { userId: st
             <Animated.View style={{ transform: [{ translateY: sheetTranslateY }] }}>
               <ScrollView bounces={false} contentContainerStyle={styles.sheetContent} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} style={styles.sheet}>
                 <View style={styles.sheetHandle} />
-                <View style={styles.sheetHero}>
-                  <View style={styles.sheetIcon}><Ionicons color={colors.ink} name={modal === 'create' ? 'color-palette-outline' : 'ticket-outline'} size={25} /></View>
+                <View style={[styles.sheetHero, modal === 'create' && { backgroundColor: clubColor }]}>
+                  <View style={styles.sheetIcon}><Ionicons color={colors.ink} name={modal === 'create' ? clubIcon : 'ticket-outline'} size={25} /></View>
                   <View style={styles.sheetTitleWrap}>
                     <Text style={styles.sheetKicker}>{modal === 'create' ? 'Nuevo club' : 'Invitación'}</Text>
                     <Text style={styles.sheetTitle}>{modal === 'create' ? 'Crea un espacio de juego' : 'Únete a tus amigos'}</Text>
                   </View>
                   <View style={styles.sheetBubble} />
                 </View>
-                <Field label={modal === 'create' ? 'Nombre del club' : 'Código de invitación'} value={value} onChangeText={setValue} autoCapitalize={modal === 'join' ? 'characters' : 'words'} placeholder={modal === 'create' ? 'Ej. Viernes de color' : 'AB12CD34'} />
+                <Field label={modal === 'create' ? 'Nombre del club' : 'Código de invitación'} value={value} onChangeText={setValue} autoCapitalize={modal === 'join' ? 'characters' : 'words'} maxLength={modal === 'create' ? 20 : undefined} placeholder={modal === 'create' ? 'Ej. Viernes de color' : 'AB12CD34'} />
+                {modal === 'create' && <Text style={styles.nameCounter}>{value.length} / 20</Text>}
+                {modal === 'create' && <>
+                  <View style={styles.identitySection}>
+                    <Text style={styles.identityLabel}>Color del club</Text>
+                    <View style={styles.identityOptions}>{clubColorChoices.map((choice) => <Pressable key={choice.hex} accessibilityLabel={choice.name} onPress={() => setClubColor(choice.hex)} style={[styles.clubColorOption, { backgroundColor: choice.hex }, clubColor === choice.hex && styles.clubIdentitySelected]}>{clubColor === choice.hex && <Ionicons color={colors.ink} name="checkmark" size={18} />}</Pressable>)}</View>
+                  </View>
+                  <View style={styles.identitySection}>
+                    <Text style={styles.identityLabel}>Icono del club</Text>
+                    <View style={styles.identityOptions}>{clubIconChoices.map((choice) => <Pressable key={choice.value} accessibilityLabel={choice.name} onPress={() => setClubIcon(choice.value)} style={[styles.clubIconOption, clubIcon === choice.value && { backgroundColor: clubColor, borderColor: colors.ink }]}><Ionicons color={colors.ink} name={choice.value} size={22} /></Pressable>)}</View>
+                  </View>
+                </>}
                 {modal === 'create' && <View style={styles.switchRow}><View style={styles.switchText}><Text style={styles.switchTitle}>Temporada mensual</Text><Body muted>El marcador se reinicia automáticamente cada mes.</Body></View><View style={styles.switchSlot}><Switch value={monthly} onValueChange={setMonthly} trackColor={{ true: colors.ink }} /></View></View>}
                 <ErrorText message={error} />
-                <Button label={modal === 'create' ? 'Crear club' : 'Unirme al club'} onPress={save} loading={saving} disabled={!value.trim()} />
-                <Button label="Cancelar" onPress={closeModal} variant="quiet" />
+                {modal === 'create' ? (
+                  <HoldCreateClubButton color={clubColor} disabled={!modalValueValid} loading={saving} onComplete={() => void save()} />
+                ) : (
+                  <Pressable disabled={!modalValueValid || saving} onPress={() => void save()} style={({ pressed }) => [styles.sheetPrimaryAction, (!modalValueValid || saving) && styles.sheetActionDisabled, pressed && styles.sheetActionPressed]}>
+                    {saving ? <ActivityIndicator color={colors.white} /> : <><View style={styles.sheetActionCopy}><Text style={styles.sheetActionKicker}>Código listo</Text><Text style={styles.sheetPrimaryText}>Unirme al club</Text></View><View style={styles.sheetActionArrow}><Ionicons color={colors.ink} name="arrow-forward" size={21} /></View></>}
+                  </Pressable>
+                )}
+                <Pressable disabled={saving} onPress={closeModal} style={({ pressed }) => [styles.sheetCancelAction, pressed && styles.sheetActionPressed]}><Text style={styles.sheetCancelText}>Cancelar</Text></Pressable>
               </ScrollView>
             </Animated.View>
           </KeyboardAvoidingView>
@@ -236,7 +318,8 @@ const styles = StyleSheet.create({
   challengeHero: { minHeight: 284, marginTop: 12, padding: 24, borderRadius: 30, backgroundColor: colors.lavender, overflow: 'hidden' },
   challengeHeroLocked: { backgroundColor: colors.blue },
   heroCopy: { zIndex: 2, width: '66%' },
-  heroKicker: { color: colors.ink, fontSize: 13, fontWeight: '600', marginBottom: 14 },
+  heroKickerRow: { minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 14 },
+  heroKicker: { color: colors.ink, fontSize: 13, fontWeight: '700' },
   heroTitle: { color: colors.ink, fontSize: 38, lineHeight: 38, fontWeight: '900', letterSpacing: -1.5 },
   heroMeta: { color: colors.ink, fontSize: 13, lineHeight: 18, marginTop: 12 },
   heroLink: { color: colors.ink, fontSize: 13, fontWeight: '800', marginTop: 20 },
@@ -254,7 +337,7 @@ const styles = StyleSheet.create({
   clubGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   clubCard: { width: '48.5%', minHeight: 190, padding: 18, borderRadius: 26, justifyContent: 'space-between' },
   clubCardWide: { width: '100%', minHeight: 176 },
-  clubBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: '#FFFFFF70' },
+  clubBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14, backgroundColor: '#FFFFFF70', flexDirection: 'row', alignItems: 'center', gap: 6 },
   clubBadgeText: { color: colors.ink, fontSize: 11, fontWeight: '600' },
   clubName: { color: colors.ink, fontSize: 23, lineHeight: 26, fontWeight: '800' },
   clubFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -274,8 +357,28 @@ const styles = StyleSheet.create({
   sheetKicker: { color: colors.ink, fontSize: 12, fontWeight: '700', opacity: 0.65, marginBottom: 4 },
   sheetTitle: { color: colors.ink, fontSize: 25, lineHeight: 28, fontWeight: '900', letterSpacing: -0.7 },
   sheetBubble: { position: 'absolute', width: 96, height: 96, borderRadius: 32, backgroundColor: colors.orange, right: -20, bottom: -25, transform: [{ rotate: '18deg' }] },
+  identitySection: { gap: 10 },
+  nameCounter: { alignSelf: 'flex-end', color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: -10 },
+  identityLabel: { color: colors.ink, fontSize: 13, fontWeight: '800' },
+  identityOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  clubColorOption: { width: 44, height: 44, borderRadius: 16, borderWidth: 3, borderColor: colors.paper, alignItems: 'center', justifyContent: 'center' },
+  clubIconOption: { width: 48, height: 48, borderRadius: 17, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  clubIdentitySelected: { borderColor: colors.ink, transform: [{ scale: 1.06 }] },
   switchRow: { minHeight: 82, paddingHorizontal: 16, borderRadius: 22, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', gap: 15 },
   switchText: { flex: 1 },
   switchTitle: { color: colors.ink, fontWeight: '700', fontSize: 16 },
   switchSlot: { width: 54, alignItems: 'center' },
+  sheetPrimaryAction: { minHeight: 74, borderRadius: 26, paddingLeft: 19, paddingRight: 11, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', overflow: 'hidden' },
+  sheetHoldProgress: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#FFFFFF66' },
+  sheetActionCopy: { zIndex: 1 },
+  sheetActionKicker: { color: colors.white, opacity: 0.58, fontSize: 11, fontWeight: '800', marginBottom: 3 },
+  sheetHoldKicker: { color: colors.ink, opacity: 0.62, fontSize: 11, fontWeight: '800', marginBottom: 3 },
+  sheetPrimaryText: { color: colors.white, fontSize: 20, fontWeight: '900' },
+  sheetHoldText: { color: colors.ink, fontSize: 20, fontWeight: '900' },
+  sheetActionArrow: { width: 48, height: 48, borderRadius: 19, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center' },
+  sheetHoldArrow: { backgroundColor: colors.white },
+  sheetCancelAction: { minHeight: 50, borderRadius: 19, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
+  sheetCancelText: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  sheetActionDisabled: { opacity: 0.42 },
+  sheetActionPressed: { opacity: 0.74, transform: [{ translateY: 1 }] },
 });

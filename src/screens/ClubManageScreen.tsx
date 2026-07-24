@@ -4,8 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { Body, Button, Card, ErrorText, Field, Header, Screen, Title } from '@/components/ui';
 import { deleteClub, deleteCurrentChallenge, getClub, getClubMembers, regenerateClubInviteCode, removeClubMember, setClubMemberRole, transferClubAdmin, updateClubSettings } from '@/lib/api';
-import { colorChoices, colors } from '@/lib/theme';
-import type { Challenge, Club, ClubMember, DurationPreset } from '@/types/domain';
+import { colors } from '@/lib/theme';
+import { clubColorChoices, clubIconChoices, resolveClubIcon } from '@/lib/clubIdentity';
+import type { Challenge, Club, ClubIcon, ClubMember, DurationPreset } from '@/types/domain';
 
 const durations: Array<{ value: DurationPreset; label: string }> = [
   { value: '30min', label: '30 min' },
@@ -25,6 +26,7 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [themeColor, setThemeColor] = useState(colors.lavender);
+  const [clubIcon, setClubIcon] = useState<ClubIcon>('color-palette-outline');
   const [invitesEnabled, setInvitesEnabled] = useState(true);
   const [challengeCreationPolicy, setChallengeCreationPolicy] = useState<Club['challenge_creation_policy']>('admins');
   const [defaultDurationPreset, setDefaultDurationPreset] = useState<DurationPreset>('2h');
@@ -42,6 +44,7 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
       setName(clubData.club.name);
       setDescription(clubData.club.description ?? '');
       setThemeColor(clubData.club.theme_color ?? colors.lavender);
+      setClubIcon(resolveClubIcon(clubData.club.icon));
       setInvitesEnabled(clubData.club.invites_enabled ?? true);
       setChallengeCreationPolicy(clubData.club.challenge_creation_policy ?? 'admins');
       setDefaultDurationPreset(clubData.club.default_duration_preset ?? '2h');
@@ -55,10 +58,10 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
   useEffect(() => { void load(); }, [clubId]);
 
   async function saveSettings() {
-    if (!name.trim() || !club) return;
+    if (name.trim().length < 2 || name.trim().length > 20 || !club) return;
     setSaving(true);
     setError(null);
-    try { await updateClubSettings(club.id, { name, description, themeColor, invitesEnabled, challengeCreationPolicy, defaultDurationPreset, defaultPhotoCount, chatEnabled }); await load(); }
+    try { await updateClubSettings(club.id, { name, description, themeColor, icon: clubIcon, invitesEnabled, challengeCreationPolicy, defaultDurationPreset, defaultPhotoCount, chatEnabled }); await load(); }
     catch (caught) { setError((caught as Error).message); }
     setSaving(false);
   }
@@ -122,7 +125,7 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
     <Screen stickyHeader bottomInset={28}>
       <Header title="Administrar" onBack={onBack} />
       <View style={styles.hero}>
-        <View style={[styles.heroIcon, { backgroundColor: themeColor }]}><Ionicons color={colors.ink} name="settings-outline" size={26} /></View>
+        <View style={[styles.heroIcon, { backgroundColor: themeColor }]}><Ionicons color={colors.ink} name={clubIcon} size={26} /></View>
         <Title>Grupo</Title>
         <Body>Configura el club, miembros y reto actual.</Body>
       </View>
@@ -130,11 +133,14 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
 
       <Text style={styles.sectionTitle}>Información</Text>
       <Card style={styles.nameCard}>
-        <Field label="Nombre del grupo" value={name} onChangeText={setName} />
+        <Field label="Nombre del grupo" value={name} onChangeText={setName} maxLength={20} />
+        <Text style={styles.nameCounter}>{name.length} / 20</Text>
         <Field label="Descripción" value={description} onChangeText={setDescription} multiline numberOfLines={3} inputStyle={styles.textArea} />
         <Text style={styles.smallLabel}>Color del grupo</Text>
-        <View style={styles.palette}>{colorChoices.map((choice) => <Pressable key={choice.hex} accessibilityLabel={choice.name} onPress={() => setThemeColor(choice.hex)} style={[styles.colorDot, { backgroundColor: choice.hex }, themeColor === choice.hex && styles.colorDotSelected]} />)}</View>
-        <Button label="Guardar cambios" onPress={saveSettings} loading={saving} />
+        <View style={styles.palette}>{clubColorChoices.map((choice) => <Pressable key={choice.hex} accessibilityLabel={choice.name} onPress={() => setThemeColor(choice.hex)} style={[styles.colorDot, { backgroundColor: choice.hex }, themeColor === choice.hex && styles.colorDotSelected]} />)}</View>
+        <Text style={styles.smallLabel}>Icono del grupo</Text>
+        <View style={styles.palette}>{clubIconChoices.map((choice) => <Pressable key={choice.value} accessibilityLabel={choice.name} onPress={() => setClubIcon(choice.value)} style={[styles.iconChoice, clubIcon === choice.value && { backgroundColor: themeColor, borderColor: colors.ink }]}><Ionicons color={colors.ink} name={choice.value} size={21} /></Pressable>)}</View>
+        <Button label="Guardar cambios" onPress={saveSettings} loading={saving} disabled={name.trim().length < 2 || name.trim().length > 20} />
       </Card>
 
       <Text style={styles.sectionTitle}>Invitaciones</Text>
@@ -155,7 +161,7 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
         <Text style={styles.smallLabel}>Duración por defecto</Text>
         <View style={styles.segmentList}>{durations.map((item) => <Pressable key={item.value} onPress={() => setDefaultDurationPreset(item.value)} style={[styles.segment, defaultDurationPreset === item.value && styles.segmentSelected]}><Text style={[styles.segmentText, defaultDurationPreset === item.value && styles.segmentTextSelected]}>{item.label}</Text></Pressable>)}</View>
         <View style={styles.settingRow}><View style={styles.settingCopy}><Text style={styles.settingTitle}>Chat del grupo</Text><Text style={styles.settingDescription}>Mantener conversación activa para este club.</Text></View><Switch value={chatEnabled} onValueChange={setChatEnabled} trackColor={{ false: '#D6D4CD', true: colors.ink }} /></View>
-        <Button label="Guardar reglas" onPress={saveSettings} loading={saving} />
+        <Button label="Guardar reglas" onPress={saveSettings} loading={saving} disabled={name.trim().length < 2 || name.trim().length > 20} />
       </Card>
 
       <Text style={styles.sectionTitle}>Usuarios del club</Text>
@@ -208,7 +214,9 @@ const styles = StyleSheet.create({
   smallLabel: { color: colors.muted, fontSize: 13, fontWeight: '700' },
   palette: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
   colorDot: { width: 38, height: 38, borderRadius: 14, borderWidth: 3, borderColor: '#FFFFFFAA' },
+  nameCounter: { alignSelf: 'flex-end', color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: -7 },
   colorDotSelected: { borderColor: colors.ink, transform: [{ scale: 1.08 }] },
+  iconChoice: { width: 44, height: 44, borderRadius: 15, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   inviteCard: { gap: 14, backgroundColor: colors.green, borderWidth: 0 },
   settingRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12 },
   settingCopy: { flex: 1, gap: 3 },

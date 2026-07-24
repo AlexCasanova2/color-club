@@ -2,6 +2,7 @@ import { useEffect, useRef, type PropsWithChildren, type ReactNode } from 'react
 import {
   ActivityIndicator,
   Animated,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -123,6 +124,29 @@ export function ErrorText({ message }: { message: string | null }) {
   return message ? <Text style={styles.error}>{message}</Text> : null;
 }
 
+export function SuccessModal({ visible, title, body, actionLabel, onAction }: { visible: boolean; title: string; body: string; actionLabel: string; onAction: () => void }) {
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={() => undefined}>
+      <View style={styles.successRoot}>
+        <View style={styles.successCard}>
+          <View style={styles.successShape} />
+          <View style={styles.successRing} />
+          <View style={styles.successIcon}><Ionicons color={colors.ink} name="checkmark" size={28} /></View>
+          <View style={styles.successCopy}>
+            <Text style={styles.successKicker}>TODO LISTO</Text>
+            <Text style={styles.successTitle}>{title}</Text>
+            <Text style={styles.successBody}>{body}</Text>
+          </View>
+          <Pressable accessibilityRole="button" onPress={onAction} style={({ pressed }) => [styles.successAction, pressed && styles.pressed]}>
+            <Text style={styles.successActionText}>{actionLabel}</Text>
+            <View style={styles.successActionIcon}><Ionicons color={colors.ink} name="arrow-forward" size={20} /></View>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export function SkeletonBlock({ style }: { style?: ViewStyle }) {
   const opacity = useRef(new Animated.Value(0.45)).current;
   useEffect(() => {
@@ -175,4 +199,16 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, textAlign: 'center', color: colors.white, fontWeight: '700', fontSize: 14, letterSpacing: 0.1 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 20 },
   skeleton: { backgroundColor: '#E3E1DA', borderRadius: 22 },
+  successRoot: { flex: 1, padding: 20, backgroundColor: '#111217B8', alignItems: 'center', justifyContent: 'center' },
+  successCard: { width: '100%', maxWidth: 430, padding: 22, borderRadius: 34, backgroundColor: colors.paper, gap: 22, overflow: 'hidden' },
+  successShape: { position: 'absolute', width: 130, height: 130, borderRadius: 42, backgroundColor: colors.lavender, right: -42, top: -48, transform: [{ rotate: '18deg' }] },
+  successRing: { position: 'absolute', width: 82, height: 82, borderRadius: 41, borderWidth: 19, borderColor: colors.yellow, right: 48, top: -34 },
+  successIcon: { width: 62, height: 62, borderRadius: 22, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
+  successCopy: { gap: 7, paddingRight: 4 },
+  successKicker: { color: colors.muted, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  successTitle: { color: colors.ink, fontSize: 32, lineHeight: 35, fontWeight: '900', letterSpacing: -1.1 },
+  successBody: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  successAction: { minHeight: 64, paddingLeft: 18, paddingRight: 10, borderRadius: 23, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  successActionText: { color: colors.white, fontSize: 16, fontWeight: '900' },
+  successActionIcon: { width: 44, height: 44, borderRadius: 18, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center' },
 });

@@ -7,6 +7,8 @@ import { Body, Button, Card, ErrorText, Field, Header, Screen, Title } from '@/c
 import { advanceChallenge, getClub, getClubMembers, getFriendships, getMyClubMembership, inviteUserToClub } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
+import { resolveClubIcon } from '@/lib/clubIdentity';
+import { subscribeToResync } from '@/lib/resilience';
 import type { Challenge, Club, ClubMember, Friendship, Participant, Profile, RankingRow } from '@/types/domain';
 
 function countdown(date: string) {
@@ -70,6 +72,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   }
 
   useEffect(() => { void load(); }, [clubId]);
+  useEffect(() => subscribeToResync(() => void load()), [clubId, userId]);
 
   useEffect(() => {
     if (!challenge) return;
@@ -166,7 +169,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   return (
     <Screen>
       <Header title={club.name} onBack={onBack} />
-      <View style={styles.hero}>
+      <View style={[styles.hero, { backgroundColor: club.theme_color || colors.lavender }]}>
         <View style={styles.heroCopy}>
           <Text style={styles.heroKicker}>Grupo privado</Text>
           <Text style={styles.heroTitle}>{club.name}</Text>
@@ -174,6 +177,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
         </View>
         <View style={styles.heroShape} />
         <View style={styles.heroRing} />
+        <View style={styles.heroClubIcon}><Ionicons color={colors.ink} name={resolveClubIcon(club.icon)} size={30} /></View>
       </View>
 
       <View style={styles.actionsRow}>
@@ -298,6 +302,7 @@ const styles = StyleSheet.create({
   heroMeta: { color: colors.ink, fontSize: 13, marginTop: 10, opacity: 0.75 },
   heroShape: { position: 'absolute', width: 118, height: 118, borderRadius: 38, backgroundColor: colors.orange, right: -20, top: -12, transform: [{ rotate: '20deg' }] },
   heroRing: { position: 'absolute', right: 30, bottom: -34, width: 92, height: 92, borderRadius: 46, borderWidth: 22, borderColor: colors.yellow },
+  heroClubIcon: { position: 'absolute', right: 25, top: 25, width: 58, height: 58, borderRadius: 21, backgroundColor: '#FFFFFF88', alignItems: 'center', justifyContent: 'center', zIndex: 3 },
   actionsRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
   actionCard: { flex: 1, minHeight: 82, padding: 14, borderRadius: 24, backgroundColor: colors.blue, flexDirection: 'row', alignItems: 'center', gap: 10 },
   inviteCard: { backgroundColor: colors.green },

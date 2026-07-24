@@ -5,6 +5,7 @@ import { Body, ErrorText, Header, Screen, Title } from '@/components/ui';
 import { getClub, getClubMessages, sendClubMessage } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
+import { subscribeToResync } from '@/lib/resilience';
 import type { Club, ClubMessage } from '@/types/domain';
 
 export function ClubChatScreen({ clubId, userId, onBack }: { clubId: string; userId: string; onBack: () => void }) {
@@ -31,6 +32,14 @@ export function ClubChatScreen({ clubId, userId, onBack }: { clubId: string; use
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   }, [clubId, userId]);
+
+  useEffect(() => subscribeToResync(() => {
+    void Promise.all([getClub(clubId, userId), getClubMessages(clubId)]).then(([clubData, messageData]) => {
+      setClub(clubData.club);
+      setMessages(messageData);
+      setError(null);
+    }).catch((caught) => setError((caught as Error).message));
+  }), [clubId, userId]);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';

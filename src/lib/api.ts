@@ -1,6 +1,7 @@
 import { decode } from 'base64-arraybuffer';
+import { resilientRead, retryWrite } from '@/lib/resilience';
 import { supabase } from '@/lib/supabase';
-import type { ActivityItem, AppNotification, Challenge, Club, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, ProfilePreview, PublicProfile, RankingRow, UserStats, Vote } from '@/types/domain';
+import type { ActivityItem, AppNotification, Challenge, Club, ClubIcon, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, ProfilePreview, PublicProfile, RankingRow, UserStats, Vote } from '@/types/domain';
 
 function isJwtFutureError(error: { message: string } | null) {
   return error?.message.toLowerCase().includes('jwt issued at future') ?? false;
@@ -19,7 +20,7 @@ export async function getClubs(): Promise<Club[]> {
   return (data ?? []) as Club[];
 }
 
-export async function getHomeDashboard(userId: string): Promise<{ clubs: Club[]; profile: Profile; challenge: (Challenge & { club_name: string; is_accessible: boolean }) | null }> {
+async function fetchHomeDashboard(userId: string): Promise<{ clubs: Club[]; profile: Profile; challenge: (Challenge & { club_name: string; club_theme_color: string; club_icon: ClubIcon; is_accessible: boolean }) | null }> {
   const firstAttempt = await getHomeDashboardData(userId);
   if (!firstAttempt.jwtFutureError) return firstAttempt.data;
   await supabase.auth.refreshSession();
@@ -28,7 +29,11 @@ export async function getHomeDashboard(userId: string): Promise<{ clubs: Club[];
   return secondAttempt.data;
 }
 
-async function getHomeDashboardData(userId: string): Promise<{ jwtFutureError: true; data?: never } | { jwtFutureError: false; data: { clubs: Club[]; profile: Profile; challenge: (Challenge & { club_name: string; is_accessible: boolean }) | null } }> {
+export function getHomeDashboard(userId: string) {
+  return resilientRead(`home:${userId}`, () => fetchHomeDashboard(userId));
+}
+
+async function getHomeDashboardData(userId: string): Promise<{ jwtFutureError: true; data?: never } | { jwtFutureError: false; data: { clubs: Club[]; profile: Profile; challenge: (Challenge & { club_name: string; club_theme_color: string; club_icon: ClubIcon; is_accessible: boolean }) | null } }> {
   const [clubsResult, profileResult] = await Promise.all([
     supabase.from('clubs').select('*').order('created_at'),
     supabase.from('profiles').select('*').eq('id', userId).single(),
@@ -77,11 +82,17 @@ async function getHomeDashboardData(userId: string): Promise<{ jwtFutureError: t
   return { jwtFutureError: false, data: {
     clubs,
     profile: profileResult.data as Profile,
-    challenge: { ...selected.challenge, club_name: clubs.find((club) => club.id === selected.challenge.club_id)?.name ?? 'Tu club', is_accessible: selected.isAccessible },
+    challenge: {
+      ...selected.challenge,
+      club_name: clubs.find((club) => club.id === selected.challenge.club_id)?.name ?? 'Tu club',
+      club_theme_color: clubs.find((club) => club.id === selected.challenge.club_id)?.theme_color ?? '#AC98FF',
+      club_icon: clubs.find((club) => club.id === selected.challenge.club_id)?.icon ?? 'color-palette-outline',
+      is_accessible: selected.isAccessible,
+    },
   } };
 }
 
-export async function getActivity(userId: string): Promise<ActivityItem[]> {
+async function fetchActivity(userId: string): Promise<ActivityItem[]> {
   const participantResult = await supabase
     .from('challenge_participants')
     .select('challenge_id,status')
@@ -106,7 +117,11 @@ export async function getActivity(userId: string): Promise<ActivityItem[]> {
   });
 }
 
-export async function getNotifications(userId: string): Promise<AppNotification[]> {
+export function getActivity(userId: string) {
+  return resilientRead(`activity:${userId}`, () => fetchActivity(userId));
+}
+
+async function fetchNotifications(userId: string): Promise<AppNotification[]> {
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
@@ -115,6 +130,10 @@ export async function getNotifications(userId: string): Promise<AppNotification[
     .limit(20);
   fail(error);
   return (data ?? []) as AppNotification[];
+}
+
+export function getNotifications(userId: string) {
+  return resilientRead(`notifications:${userId}`, () => fetchNotifications(userId));
 }
 
 export async function getUnreadNotificationCount(userId: string): Promise<number> {
@@ -198,7 +217,7 @@ export async function savePushToken(token: string, platform: string) {
   fail(error);
 }
 
-export async function getFriendships(): Promise<Friendship[]> {
+async function fetchFriendships(): Promise<Friendship[]> {
   const { data, error } = await supabase
     .from('friendships')
     .select('*, requester:profiles!friendships_requester_id_fkey(*), addressee:profiles!friendships_addressee_id_fkey(*)')
@@ -206,6 +225,10 @@ export async function getFriendships(): Promise<Friendship[]> {
     .order('created_at', { ascending: false });
   fail(error);
   return (data ?? []) as unknown as Friendship[];
+}
+
+export function getFriendships() {
+  return resilientRead('friendships:current', fetchFriendships);
 }
 
 export async function sendFriendRequest(identifier: string) {
@@ -223,10 +246,12 @@ export async function removeFriendship(friendshipId: string) {
   fail(error);
 }
 
-export async function createClub(name: string, monthly: boolean) {
+export async function createClub(name: string, monthly: boolean, themeColor: string, icon: ClubIcon) {
   const { data, error } = await supabase.rpc('create_club', {
     club_name: name,
     reset_mode: monthly ? 'monthly_auto' : 'manual',
+    club_theme_color: themeColor,
+    club_icon: icon,
   });
   fail(error);
   return data as string;
@@ -252,7 +277,7 @@ export async function respondClubInvite(inviteId: string, accept: boolean): Prom
   return data as string;
 }
 
-export async function getClub(clubId: string, userId?: string): Promise<{ club: Club; challenge: Challenge | null; seasonId: string; ranking: RankingRow[]; myChallengeColor: string | null; myChallengeStatus: Participant['status'] | null; isChallengeParticipant: boolean; submittedCount: number; participantCount: number }> {
+async function fetchClub(clubId: string, userId?: string): Promise<{ club: Club; challenge: Challenge | null; seasonId: string; ranking: RankingRow[]; myChallengeColor: string | null; myChallengeStatus: Participant['status'] | null; isChallengeParticipant: boolean; submittedCount: number; participantCount: number }> {
   const [clubResult, challengeResult, seasonResult] = await Promise.all([
     supabase.from('clubs').select('*').eq('id', clubId).single(),
     supabase.from('challenges').select('*').eq('club_id', clubId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
@@ -314,7 +339,11 @@ export async function getClub(clubId: string, userId?: string): Promise<{ club: 
   };
 }
 
-export async function getClubMembers(clubId: string): Promise<ClubMember[]> {
+export function getClub(clubId: string, userId?: string) {
+  return resilientRead(`club:${clubId}:${userId ?? 'anonymous'}`, () => fetchClub(clubId, userId));
+}
+
+async function fetchClubMembers(clubId: string): Promise<ClubMember[]> {
   const { data, error } = await supabase
     .from('club_members')
     .select('*, profiles!club_members_user_id_fkey(*)')
@@ -325,7 +354,11 @@ export async function getClubMembers(clubId: string): Promise<ClubMember[]> {
   return (data ?? []) as unknown as ClubMember[];
 }
 
-export async function getMyClubMembership(clubId: string, userId: string): Promise<ClubMember | null> {
+export function getClubMembers(clubId: string) {
+  return resilientRead(`club-members:${clubId}`, () => fetchClubMembers(clubId));
+}
+
+async function fetchMyClubMembership(clubId: string, userId: string): Promise<ClubMember | null> {
   const { data, error } = await supabase
     .from('club_members')
     .select('*, profiles!club_members_user_id_fkey(*)')
@@ -337,7 +370,11 @@ export async function getMyClubMembership(clubId: string, userId: string): Promi
   return data as unknown as ClubMember | null;
 }
 
-export async function getClubMessages(clubId: string): Promise<ClubMessage[]> {
+export function getMyClubMembership(clubId: string, userId: string) {
+  return resilientRead(`club-membership:${clubId}:${userId}`, () => fetchMyClubMembership(clubId, userId));
+}
+
+async function fetchClubMessages(clubId: string): Promise<ClubMessage[]> {
   const { data, error } = await supabase
     .from('club_messages')
     .select('*, profiles!club_messages_sender_id_fkey(*)')
@@ -346,6 +383,10 @@ export async function getClubMessages(clubId: string): Promise<ClubMessage[]> {
     .limit(30);
   fail(error);
   return ((data ?? []) as unknown as ClubMessage[]).reverse();
+}
+
+export function getClubMessages(clubId: string) {
+  return resilientRead(`club-messages:${clubId}`, () => fetchClubMessages(clubId));
 }
 
 export async function sendClubMessage(clubId: string, senderId: string, body: string) {
@@ -357,6 +398,7 @@ export async function updateClubSettings(clubId: string, settings: {
   name: string;
   description: string;
   themeColor: string;
+  icon: ClubIcon;
   invitesEnabled: boolean;
   challengeCreationPolicy: Club['challenge_creation_policy'];
   defaultDurationPreset: DurationPreset;
@@ -368,6 +410,7 @@ export async function updateClubSettings(clubId: string, settings: {
     new_name: settings.name.trim(),
     new_description: settings.description.trim(),
     new_theme_color: settings.themeColor,
+    new_icon: settings.icon,
     new_invites_enabled: settings.invitesEnabled,
     new_challenge_creation_policy: settings.challengeCreationPolicy,
     new_default_duration_preset: settings.defaultDurationPreset,
@@ -433,7 +476,7 @@ export async function createChallenge(clubId: string, mode: 'shared_color' | 'in
   return data as string;
 }
 
-export async function getChallenge(challengeId: string, userId: string) {
+async function fetchChallenge(challengeId: string, userId: string) {
   const [challengeResult, participantsResult, votesResult] = await Promise.all([
     supabase.from('challenges').select('*').eq('id', challengeId).single(),
     supabase.from('challenge_participants').select('*, profiles!challenge_participants_user_id_fkey(*)').eq('challenge_id', challengeId).order('submitted_at'),
@@ -477,6 +520,10 @@ export async function getChallenge(challengeId: string, userId: string) {
   };
 }
 
+export function getChallenge(challengeId: string, userId: string) {
+  return resilientRead(`challenge:${challengeId}:${userId}`, () => fetchChallenge(challengeId, userId));
+}
+
 export async function advanceChallenge(challengeId: string) {
   const { error } = await supabase.rpc('advance_challenge', { target_challenge_id: challengeId });
   fail(error);
@@ -492,17 +539,21 @@ export async function uploadPhoto(participantId: string, slot: number, uri: stri
     reader.readAsDataURL(blob);
   });
   const path = `${participantId}/${slot}-${Date.now()}.jpg`;
-  const upload = await supabase.storage.from('collages').upload(path, decode(base64), {
-    contentType: 'image/jpeg',
-    upsert: true,
+  await retryWrite(async () => {
+    const upload = await supabase.storage.from('collages').upload(path, decode(base64), {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+    fail(upload.error);
   });
-  fail(upload.error);
-  const result = await supabase.rpc('save_participant_photo', {
-    target_participant_id: participantId,
-    target_slot: slot,
-    target_photo_url: path,
+  await retryWrite(async () => {
+    const result = await supabase.rpc('save_participant_photo', {
+      target_participant_id: participantId,
+      target_slot: slot,
+      target_photo_url: path,
+    });
+    fail(result.error);
   });
-  fail(result.error);
 }
 
 export async function submitCollage(participantId: string) {

@@ -1,5 +1,6 @@
 export type ChallengeStatus = 'configuring' | 'active' | 'voting' | 'closed';
 export type DurationPreset = '30min' | '2h' | '6h' | '24h' | '48h' | '1week';
+export type ClubIcon = 'color-palette-outline' | 'camera-outline' | 'sparkles-outline' | 'people-outline' | 'heart-outline' | 'planet-outline' | 'sunny-outline' | 'flower-outline';
 
 export interface Profile {
   id: string;
@@ -41,6 +42,7 @@ export interface Club {
   photo_url: string | null;
   description: string | null;
   theme_color: string;
+  icon: ClubIcon;
   admin_id: string;
   invite_code: string;
   season_reset_mode: 'manual' | 'monthly_auto';

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Body, Card, ErrorText, Header, Screen, SkeletonBlock, Title } from '@/components/ui';
 import { deleteNotification, deleteNotifications, getNotifications, markAllNotificationsRead, markNotificationRead, respondClubInvite } from '@/lib/api';
 import { colors } from '@/lib/theme';
+import { subscribeToResync } from '@/lib/resilience';
 import type { AppNotification } from '@/types/domain';
 
 function ActivitySkeleton() {
@@ -61,6 +62,8 @@ export function ActivityScreen({ userId, onOpenChallenge, onOpenClub, onOpenFrie
       .catch((caught) => setError((caught as Error).message))
       .finally(() => setLoading(false));
   }, [userId]);
+
+  useEffect(() => subscribeToResync(() => void getNotifications(userId).then(setNotifications).catch((caught) => setError((caught as Error).message))), [userId]);
 
   async function openNotification(notification: AppNotification) {
     if (!notification.read_at) {
