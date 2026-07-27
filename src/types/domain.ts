@@ -10,6 +10,7 @@ export interface Profile {
   avatar_url: string | null;
   challenge_notifications: boolean;
   friend_notifications: boolean;
+  reengagement_notifications: boolean;
   weekly_summary: boolean;
   allow_friend_requests: boolean;
   profile_discoverable: boolean;
@@ -125,7 +126,7 @@ export interface Vote {
 export interface AppNotification {
   id: string;
   user_id: string;
-  type: 'challenge' | 'friend_request' | 'club_invite' | 'weekly_summary';
+  type: 'challenge' | 'friend_request' | 'club_invite' | 'weekly_summary' | 'reengagement';
   title: string;
   body: string;
   related_club_id: string | null;

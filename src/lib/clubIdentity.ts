@@ -1,6 +1,8 @@
 import { colors } from '@/lib/theme';
 import type { ClubIcon } from '@/types/domain';
 
+export const clubMemberLimit = 12;
+
 export const clubColorChoices = [
   { name: 'Naranja', hex: colors.orange },
   { name: 'Azul', hex: colors.blue },

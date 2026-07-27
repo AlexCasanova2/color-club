@@ -217,6 +217,11 @@ export async function savePushToken(token: string, platform: string) {
   fail(error);
 }
 
+export async function touchUserActivity() {
+  const { error } = await supabase.rpc('touch_user_activity');
+  fail(error);
+}
+
 async function fetchFriendships(): Promise<Friendship[]> {
   const { data, error } = await supabase
     .from('friendships')

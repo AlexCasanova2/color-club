@@ -90,7 +90,8 @@ Las funciones internas no están disponibles para clientes y deben ejecutarse co
 - `advance_challenges()` activa retos programados, descalifica collages incompletos, abre votaciones y cierra votaciones vencidas.
 - `reset_monthly_seasons()` reinicia temporadas mensuales si se usa esa configuración.
 - `create_weekly_summary_notifications()` genera notificaciones de resumen semanal para usuarios que tengan esa preferencia activa.
-- `create_challenge_deadline_notifications()` genera recordatorios cuando quedan 2 horas para enviar collage.
+- `create_challenge_deadline_notifications()` genera recordatorios cuando quedan 2 horas para enviar el collage o para votar, solo si la acción sigue pendiente.
+- `create_reengagement_notifications()` genera como máximo una reactivación cada 7 días para usuarios con push activadas que lleven varios días sin entrar y tengan contenido relevante.
 
 Ejemplo para programar el recordatorio de deadline cada 10 minutos:
 
@@ -99,6 +100,16 @@ select cron.schedule(
   'challenge-deadline-notifications',
   '*/10 * * * *',
   'select public.create_challenge_deadline_notifications()'
+);
+```
+
+Ejemplo para revisar reactivaciones una vez al día:
+
+```sql
+select cron.schedule(
+  'daily-reengagement-notifications',
+  '0 18 * * *',
+  'select public.create_reengagement_notifications()'
 );
 ```
 

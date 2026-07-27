@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import type { Profile } from '@/types/domain';
 
-type BooleanSetting = 'challenge_notifications' | 'friend_notifications' | 'weekly_summary' | 'allow_friend_requests' | 'profile_discoverable';
+type BooleanSetting = 'challenge_notifications' | 'friend_notifications' | 'reengagement_notifications' | 'weekly_summary' | 'allow_friend_requests' | 'profile_discoverable';
 
 function SettingRow({ icon, title, description, value, onChange, last = false }: {
   icon: keyof typeof Ionicons.glyphMap;
@@ -122,6 +122,7 @@ export function AccountScreen({ userId, email, onEditProfile, onViewPublicProfil
           <Text style={styles.sectionTitle}>Notificaciones</Text>
           <View style={styles.sectionCard}>
             <SettingRow icon="color-palette-outline" title="Retos del club" description="Inicios, plazos y votaciones" value={value('challenge_notifications')} onChange={(next) => void updateSetting('challenge_notifications', next)} />
+            <SettingRow icon="sparkles-outline" title="Volver a Color Club" description="Novedades relevantes después de unos días sin entrar" value={value('reengagement_notifications')} onChange={(next) => void updateSetting('reengagement_notifications', next)} />
             <SettingRow icon="people-outline" title="Solicitudes de amistad" description="Cuando alguien quiera añadirte" value={value('friend_notifications')} onChange={(next) => void updateSetting('friend_notifications', next)} last />
           </View>
 

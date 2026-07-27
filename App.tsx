@@ -6,11 +6,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import { FloatingMenu, type MenuTab } from '@/components/FloatingMenu';
 import { Body, Button, Card, Screen, SuccessModal, Title } from '@/components/ui';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
-import { getUnreadNotificationCount, markNotificationRead } from '@/lib/api';
+import { getUnreadNotificationCount, markNotificationRead, touchUserActivity } from '@/lib/api';
 import { registerForPushNotifications } from '@/lib/pushNotifications';
 import { clearReadCache, requestResync, subscribeToCachedFallback } from '@/lib/resilience';
 import { colors } from '@/lib/theme';
@@ -43,6 +44,12 @@ type Route =
   | { name: 'public-profile'; userId: string; backTo: 'account' | 'friends' | 'club-manage'; clubId?: string };
 
 const onboardingStorageKey = 'color-club:onboarding-seen:v1';
+
+type PushTarget = {
+  notificationId?: string;
+  clubId?: string;
+  challengeId?: string;
+};
 
 function SetupScreen() {
   return (
@@ -122,6 +129,7 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(false);
   const [connectionRestored, setConnectionRestored] = useState(false);
   const [usingCachedData, setUsingCachedData] = useState(false);
+  const [pushTarget, setPushTarget] = useState<PushTarget | null>(null);
   const wasOffline = useRef(false);
 
   async function unlockWithFaceId() {
@@ -197,11 +205,45 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (session && biometricUnlocked && !isOffline) void touchUserActivity().catch(() => undefined);
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && !isOffline) requestResync();
+      if (state !== 'active' || isOffline) return;
+      requestResync();
+      if (session && biometricUnlocked) void touchUserActivity().catch(() => undefined);
     });
     return () => subscription.remove();
-  }, [isOffline]);
+  }, [session?.user.id, biometricUnlocked, isOffline]);
+
+  useEffect(() => {
+    function captureResponse(response: Notifications.NotificationResponse | null) {
+      if (!response) return;
+      const data = response.notification.request.content.data;
+      setPushTarget({
+        notificationId: typeof data.notificationId === 'string' ? data.notificationId : undefined,
+        clubId: typeof data.clubId === 'string' ? data.clubId : undefined,
+        challengeId: typeof data.challengeId === 'string' ? data.challengeId : undefined,
+      });
+      void Notifications.clearLastNotificationResponseAsync();
+    }
+
+    void Notifications.getLastNotificationResponseAsync().then(captureResponse).catch(() => undefined);
+    const subscription = Notifications.addNotificationResponseReceivedListener(captureResponse);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!pushTarget || !session || !biometricUnlocked) return;
+    if (pushTarget.notificationId) {
+      void markNotificationRead(pushTarget.notificationId)
+        .then(() => getUnreadNotificationCount(session.user.id))
+        .then(setUnreadNotifications)
+        .catch(() => undefined);
+    }
+    if (pushTarget.clubId && pushTarget.challengeId) setRoute({ name: 'challenge', clubId: pushTarget.clubId, challengeId: pushTarget.challengeId });
+    else if (pushTarget.clubId) setRoute({ name: 'club', clubId: pushTarget.clubId });
+    else setRoute({ name: 'activity' });
+    setPushTarget(null);
+  }, [pushTarget, session?.user.id, biometricUnlocked]);
 
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -308,6 +350,8 @@ export default function App() {
       setUnreadNotifications((current) => Math.max(0, current - 1));
     }
     if (notification.type === 'challenge' && notification.related_club_id && notification.related_challenge_id) setRoute({ name: 'challenge', clubId: notification.related_club_id, challengeId: notification.related_challenge_id });
+    else if (notification.type === 'reengagement' && notification.related_club_id && notification.related_challenge_id) setRoute({ name: 'challenge', clubId: notification.related_club_id, challengeId: notification.related_challenge_id });
+    else if (notification.type === 'reengagement' && notification.related_club_id) setRoute({ name: 'club', clubId: notification.related_club_id });
     else if (notification.type === 'club_invite') setRoute({ name: 'activity' });
     else if (notification.type === 'friend_request') setRoute({ name: 'friends' });
     else setRoute({ name: 'activity' });
@@ -341,7 +385,7 @@ export default function App() {
       <Modal animationType="fade" transparent visible={notificationToast !== null}>
         <View pointerEvents="box-none" style={styles.notificationLayer}>
           <Pressable onPress={() => notificationToast && void openNotification(notificationToast)} style={styles.notificationToast}>
-            <View style={styles.notificationIcon}><Ionicons color={colors.ink} name={notificationToast?.type === 'friend_request' ? 'person-add-outline' : notificationToast?.type === 'club_invite' ? 'people-outline' : notificationToast?.type === 'weekly_summary' ? 'calendar-outline' : 'color-palette-outline'} size={20} /></View>
+            <View style={styles.notificationIcon}><Ionicons color={colors.ink} name={notificationToast?.type === 'friend_request' ? 'person-add-outline' : notificationToast?.type === 'club_invite' ? 'people-outline' : notificationToast?.type === 'weekly_summary' ? 'calendar-outline' : notificationToast?.type === 'reengagement' ? 'sparkles-outline' : 'color-palette-outline'} size={20} /></View>
             <View style={styles.notificationCopy}><Text style={styles.notificationTitle}>{notificationToast?.title}</Text><Text style={styles.notificationBody}>{notificationToast?.body}</Text></View>
           </Pressable>
         </View>

@@ -5,7 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Body, Button, Card, ErrorText, Field, Header, Screen, Title } from '@/components/ui';
 import { deleteClub, deleteCurrentChallenge, getClub, getClubMembers, regenerateClubInviteCode, removeClubMember, setClubMemberRole, transferClubAdmin, updateClubSettings } from '@/lib/api';
 import { colors } from '@/lib/theme';
-import { clubColorChoices, clubIconChoices, resolveClubIcon } from '@/lib/clubIdentity';
+import { clubColorChoices, clubIconChoices, clubMemberLimit, resolveClubIcon } from '@/lib/clubIdentity';
 import type { Challenge, Club, ClubIcon, ClubMember, DurationPreset } from '@/types/domain';
 
 const durations: Array<{ value: DurationPreset; label: string }> = [
@@ -121,6 +121,8 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
 
   if (loading || !club) return <Screen stickyHeader bottomInset={28}><Header title="Administrar" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /></Screen>;
 
+  const isClubFull = members.length >= clubMemberLimit;
+
   return (
     <Screen stickyHeader bottomInset={28}>
       <Header title="Administrar" onBack={onBack} />
@@ -145,9 +147,9 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
 
       <Text style={styles.sectionTitle}>Invitaciones</Text>
       <Card style={styles.inviteCard}>
-        <View style={styles.settingRow}><View style={styles.settingCopy}><Text style={styles.settingTitle}>Permitir nuevas invitaciones</Text><Text style={styles.settingDescription}>Activa o pausa el acceso por código.</Text></View><Switch value={invitesEnabled} onValueChange={setInvitesEnabled} trackColor={{ false: '#D6D4CD', true: colors.ink }} /></View>
-        <View style={styles.inviteCodeRow}><View><Text style={styles.inviteLabel}>Código actual</Text><Text style={styles.inviteCode}>{club.invite_code}</Text></View><Pressable onPress={copyInviteCode} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><Ionicons color={colors.ink} name="copy-outline" size={19} /></Pressable><Pressable onPress={shareInvite} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><Ionicons color={colors.ink} name="share-outline" size={19} /></Pressable></View>
-        <Button label="Regenerar código" onPress={confirmRegenerateCode} variant="secondary" />
+        <View style={styles.settingRow}><View style={styles.settingCopy}><Text style={styles.settingTitle}>Permitir nuevas invitaciones</Text><Text style={styles.settingDescription}>{isClubFull ? 'Cupo completo. Elimina un integrante para volver a invitar.' : 'Activa o pausa el acceso por código.'}</Text></View><Switch value={invitesEnabled} onValueChange={setInvitesEnabled} trackColor={{ false: '#D6D4CD', true: colors.ink }} /></View>
+        <View style={[styles.inviteCodeRow, isClubFull && styles.disabledInvite]}><View><Text style={styles.inviteLabel}>Código actual</Text><Text style={styles.inviteCode}>{club.invite_code}</Text></View><Pressable disabled={isClubFull} onPress={copyInviteCode} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><Ionicons color={colors.ink} name="copy-outline" size={19} /></Pressable><Pressable disabled={isClubFull} onPress={shareInvite} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}><Ionicons color={colors.ink} name="share-outline" size={19} /></Pressable></View>
+        <Button label="Regenerar código" onPress={confirmRegenerateCode} variant="secondary" disabled={isClubFull} />
       </Card>
 
       <Text style={styles.sectionTitle}>Reglas por defecto</Text>
@@ -164,7 +166,7 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
         <Button label="Guardar reglas" onPress={saveSettings} loading={saving} disabled={name.trim().length < 2 || name.trim().length > 20} />
       </Card>
 
-      <Text style={styles.sectionTitle}>Usuarios del club</Text>
+      <Text style={styles.sectionTitle}>Usuarios del club · {members.length} / {clubMemberLimit}</Text>
       <View style={styles.membersList}>
         {members.map((member) => (
           <View key={member.id} style={styles.memberRow}>
@@ -225,6 +227,7 @@ const styles = StyleSheet.create({
   inviteCodeRow: { minHeight: 70, paddingHorizontal: 14, borderRadius: 22, backgroundColor: '#FFFFFF88', flexDirection: 'row', alignItems: 'center', gap: 10 },
   inviteLabel: { color: colors.ink, opacity: 0.6, fontSize: 11, fontWeight: '800', marginBottom: 3 },
   inviteCode: { color: colors.ink, fontSize: 18, fontWeight: '900', letterSpacing: 1 },
+  disabledInvite: { opacity: 0.5 },
   rulesCard: { gap: 14, backgroundColor: colors.lavender, borderWidth: 0 },
   segmentList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   segment: { minHeight: 42, minWidth: '30%', flexGrow: 1, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#FFFFFF88', alignItems: 'center', justifyContent: 'center' },

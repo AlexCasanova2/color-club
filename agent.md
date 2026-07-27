@@ -38,6 +38,7 @@
 - New schema changes should be added as a new numbered migration, not edited into an already-applied migration unless explicitly requested.
 - Weekly summary notifications require scheduling `create_weekly_summary_notifications()` in Supabase Scheduler/Cron.
 - Challenge deadline reminders require scheduling `create_challenge_deadline_notifications()` in Supabase Scheduler/Cron.
+- Re-engagement notifications require scheduling `create_reengagement_notifications()` daily in Supabase Scheduler/Cron.
 - Push notifications are sent by `supabase/functions/send-push-notification`; it must fail closed if `PUSH_WEBHOOK_SECRET` is missing and the webhook must send `x-push-webhook-secret`.
 
 ## Git Notes

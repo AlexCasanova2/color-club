@@ -12,8 +12,8 @@ function ActivitySkeleton() {
 }
 
 function NotificationRow({ notification, selected, selecting, responding, onOpen, onDelete, onToggleSelect, onRespondInvite }: { notification: AppNotification; selected: boolean; selecting: boolean; responding: boolean; onOpen: () => void; onDelete: () => void; onToggleSelect: () => void; onRespondInvite: (accept: boolean) => void }) {
-  const iconName = notification.type === 'friend_request' ? 'person-add-outline' : notification.type === 'club_invite' ? 'people-outline' : notification.type === 'weekly_summary' ? 'calendar-outline' : 'color-palette-outline';
-  const tint = notification.type === 'friend_request' ? colors.blue : notification.type === 'club_invite' ? colors.lavender : notification.type === 'weekly_summary' ? colors.orange : colors.green;
+  const iconName = notification.type === 'friend_request' ? 'person-add-outline' : notification.type === 'club_invite' ? 'people-outline' : notification.type === 'weekly_summary' ? 'calendar-outline' : notification.type === 'reengagement' ? 'sparkles-outline' : 'color-palette-outline';
+  const tint = notification.type === 'friend_request' ? colors.blue : notification.type === 'club_invite' ? colors.lavender : notification.type === 'weekly_summary' ? colors.orange : notification.type === 'reengagement' ? colors.pink : colors.green;
 
   return (
     <View style={[styles.notificationItem, { backgroundColor: notification.read_at ? colors.surface : tint }, selected && styles.notificationSelected]}>
@@ -26,7 +26,7 @@ function NotificationRow({ notification, selected, selecting, responding, onOpen
         <View style={styles.notificationIcon}><Ionicons color={colors.ink} name={iconName} size={18} /></View>
         <View style={styles.notificationCopy}>
           <Text numberOfLines={1} style={styles.notificationTitle}>{notification.title}</Text>
-          {notification.type === 'club_invite' && <Text numberOfLines={2} style={styles.notificationBody}>{notification.body}</Text>}
+          {(notification.type === 'club_invite' || notification.type === 'reengagement') && <Text numberOfLines={2} style={styles.notificationBody}>{notification.body}</Text>}
         </View>
         {!notification.read_at && <View style={styles.unreadDot} />}
       </Pressable>
@@ -72,6 +72,8 @@ export function ActivityScreen({ userId, onOpenChallenge, onOpenClub, onOpenFrie
       onNotificationRead();
     }
     if (notification.type === 'challenge' && notification.related_club_id && notification.related_challenge_id) onOpenChallenge(notification.related_club_id, notification.related_challenge_id);
+    if (notification.type === 'reengagement' && notification.related_club_id && notification.related_challenge_id) onOpenChallenge(notification.related_club_id, notification.related_challenge_id);
+    else if (notification.type === 'reengagement' && notification.related_club_id) onOpenClub(notification.related_club_id);
     if (notification.type === 'club_invite' && notification.related_club_id) onOpenClub(notification.related_club_id);
     if (notification.type === 'friend_request') onOpenFriends();
   }

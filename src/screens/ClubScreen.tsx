@@ -7,7 +7,7 @@ import { Body, Button, Card, ErrorText, Field, Header, Screen, Title } from '@/c
 import { advanceChallenge, getClub, getClubMembers, getFriendships, getMyClubMembership, inviteUserToClub } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { resolveClubIcon } from '@/lib/clubIdentity';
+import { clubMemberLimit, resolveClubIcon } from '@/lib/clubIdentity';
 import { subscribeToResync } from '@/lib/resilience';
 import type { Challenge, Club, ClubMember, Friendship, Participant, Profile, RankingRow } from '@/types/domain';
 
@@ -57,7 +57,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
 
   async function load() {
     try {
-      const [data, memberData] = await Promise.all([getClub(clubId, userId), getMyClubMembership(clubId, userId)]);
+      const [data, memberData, members] = await Promise.all([getClub(clubId, userId), getMyClubMembership(clubId, userId), getClubMembers(clubId)]);
       setClub(data.club);
       setMembership(memberData);
       setChallenge(data.challenge);
@@ -67,6 +67,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
       setIsChallengeParticipant(data.isChallengeParticipant);
       setSubmittedCount(data.submittedCount);
       setParticipantCount(data.participantCount);
+      setMemberUserIds(members.map((member) => member.user_id));
     } catch (caught) { setError((caught as Error).message); }
     setLoading(false);
   }
@@ -130,8 +131,8 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
     setInviteError(null);
     setIdentifier('');
     setInvitedFriendIds([]);
-    setMemberUserIds([]);
     if (club && !club.invites_enabled) { showToast('Las invitaciones están pausadas.'); return; }
+    if (memberUserIds.length >= clubMemberLimit) { showToast('El grupo ya tiene 12 integrantes.'); return; }
     setInviteOpen(true);
     try {
       const [relationships, members] = await Promise.all([getFriendships(), getClubMembers(clubId)]);
@@ -165,6 +166,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   const challengeTitle = !canOpenChallenge ? 'Reto ya en curso' : challenge?.status === 'voting' ? 'Elige el mejor collage' : isWaitingForVoting ? 'Todo listo' : isWaitingForOthers ? 'Esperando al resto' : 'Encuentra este color';
   const challengeTimer = !canOpenChallenge ? 'Podrás participar en el siguiente reto' : challenge?.status === 'voting' && challenge.voting_ends_at ? `Vota en ${countdown(challenge.voting_ends_at)}` : challenge?.status === 'active' ? countdown(challenge.ends_at) : 'Abrir reto →';
   const showWaitingSwatch = isWaitingForOthers || isWaitingForVoting;
+  const isClubFull = memberUserIds.length >= clubMemberLimit;
 
   return (
     <Screen>
@@ -185,9 +187,9 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
           <View style={styles.actionIcon}><Ionicons color={colors.ink} name="chatbubbles-outline" size={20} /></View>
           <View style={styles.actionText}><Text style={styles.actionTitle}>Chat</Text><Text style={styles.actionMeta}>{club.chat_enabled ? 'Hablar con el grupo' : 'Desactivado por admin'}</Text></View>
         </Pressable>
-        <Pressable disabled={!club.invites_enabled} onPress={openInvite} style={({ pressed }) => [styles.actionCard, styles.inviteCard, !club.invites_enabled && styles.disabledAction, pressed && styles.pressed]}>
+        <Pressable disabled={!club.invites_enabled || isClubFull} onPress={openInvite} style={({ pressed }) => [styles.actionCard, styles.inviteCard, (!club.invites_enabled || isClubFull) && styles.disabledAction, pressed && styles.pressed]}>
           <View style={styles.actionIcon}><Ionicons color={colors.ink} name="person-add-outline" size={20} /></View>
-          <View style={styles.actionText}><Text style={styles.actionTitle}>Invitar</Text><Text style={styles.actionMeta}>{club.invites_enabled ? 'Amigos o código' : 'Invitaciones pausadas'}</Text></View>
+          <View style={styles.actionText}><Text style={styles.actionTitle}>Invitar</Text><Text style={styles.actionMeta}>{isClubFull ? 'Cupo completo · 12/12' : club.invites_enabled ? `Amigos o código · ${memberUserIds.length}/12` : 'Invitaciones pausadas'}</Text></View>
         </Pressable>
       </View>
 
