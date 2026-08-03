@@ -4,21 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Body, ErrorText, Eyebrow, Header, Screen, SuccessModal, Title } from '@/components/ui';
 import { createChallenge, getClub } from '@/lib/api';
+import { durationOptions, individualRandomChoice, photoCountOptions, resolveChallengeSelection, sharedRandomChoice } from '@/lib/challengeRules';
 import { colorChoices, colors } from '@/lib/theme';
 import type { DurationPreset } from '@/types/domain';
-
-const durations: Array<{ value: DurationPreset; label: string }> = [
-  { value: '30min', label: '30 min' },
-  { value: '2h', label: '2 horas' },
-  { value: '6h', label: '6 horas' },
-  { value: '24h', label: '24 horas' },
-  { value: '48h', label: '48 horas' },
-  { value: '1week', label: '1 semana' },
-];
-
-const photoCounts = [2, 4, 6, 8, 10, 12];
-const sharedRandomChoice = { name: 'Color compartido aleatorio', hex: 'shared-random' };
-const individualRandomChoice = { name: 'Color aleatorio individual', hex: 'individual-random' };
 
 export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: string; onBack: () => void; onCreated: (id: string) => void }) {
   const [color, setColor] = useState(colorChoices[0]!.hex);
@@ -49,9 +37,8 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
   async function launch() {
     setLoading(true);
     setError(null);
-    const mode = color === individualRandomChoice.hex ? 'individual_random' : 'shared_color';
-    const sharedColor = color === sharedRandomChoice.hex ? colorChoices[Math.floor(Math.random() * colorChoices.length)]!.hex : color;
-    const colorSelectionMode = color === sharedRandomChoice.hex ? 'shared_random' : color === individualRandomChoice.hex ? 'individual_random' : 'manual';
+    const randomColor = colorChoices[Math.floor(Math.random() * colorChoices.length)]!.hex;
+    const { mode, sharedColor, colorSelectionMode } = resolveChallengeSelection(color, randomColor);
     try {
       setCreatedChallengeId(await createChallenge(clubId, mode, sharedColor, duration, photoCount, colorSelectionMode));
       setLoading(false);
@@ -108,11 +95,11 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
       {color === individualRandomChoice.hex && <View style={styles.explainer}><Text style={styles.explainerTitle}>Color único por persona</Text><Text style={styles.explainerText}>Cada participante recibirá un color aleatorio distinto al de los demás.</Text></View>}
       <Text style={styles.label}>Número de fotos</Text>
       <View style={styles.countList}>
-        {photoCounts.map((count) => <Pressable key={count} onPress={() => setPhotoCount(count)} style={[styles.countOption, photoCount === count && styles.countSelected]}><Text style={[styles.countText, photoCount === count && styles.durationTextSelected]}>{count}</Text></Pressable>)}
+        {photoCountOptions.map((count) => <Pressable key={count} onPress={() => setPhotoCount(count)} style={[styles.countOption, photoCount === count && styles.countSelected]}><Text style={[styles.countText, photoCount === count && styles.durationTextSelected]}>{count}</Text></Pressable>)}
       </View>
       <Text style={styles.label}>Tiempo para completar el reto</Text>
       <View style={styles.durationList}>
-        {durations.map((item) => (
+        {durationOptions.map((item) => (
           <Pressable key={item.value} onPress={() => setDuration(item.value)} style={[styles.duration, duration === item.value && styles.durationSelected]}>
             <Text style={[styles.durationText, duration === item.value && styles.durationTextSelected]}>{item.label}</Text>
           </Pressable>
@@ -122,7 +109,7 @@ export function NewChallengeScreen({ clubId, onBack, onCreated }: { clubId: stri
         <View style={styles.launchSummary}>
           <View style={styles.launchChip}><View style={[styles.launchDot, { backgroundColor: color.includes('random') ? colors.ink : color }]} /><Text style={styles.launchChipText}>{color === individualRandomChoice.hex ? 'Único' : color === sharedRandomChoice.hex ? 'Aleatorio' : 'Compartido'}</Text></View>
           <View style={styles.launchChip}><Ionicons color={colors.ink} name="images-outline" size={15} /><Text style={styles.launchChipText}>{photoCount} fotos</Text></View>
-          <View style={styles.launchChip}><Ionicons color={colors.ink} name="timer-outline" size={15} /><Text style={styles.launchChipText}>{durations.find((item) => item.value === duration)?.label}</Text></View>
+          <View style={styles.launchChip}><Ionicons color={colors.ink} name="timer-outline" size={15} /><Text style={styles.launchChipText}>{durationOptions.find((item) => item.value === duration)?.label}</Text></View>
         </View>
         <Pressable disabled={loading} onPressIn={beginHold} onPressOut={endHold} style={({ pressed }) => [styles.launchButton, pressed && styles.launchPressed, loading && styles.launchLoading]}>
           <Animated.View pointerEvents="none" style={[styles.launchProgress, { backgroundColor: launchProgressColor, width: holdProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />

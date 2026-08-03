@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>Confirma tu cuenta de Color Club</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f8f8f5;color:#111217;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      Confirma tu correo y empieza a compartir retos de color con tu club.
+    </div>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background-color:#f8f8f5;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:560px;">
+            <tr>
+              <td style="padding:0 8px 18px;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="padding-right:5px;"><span style="display:block;width:9px;height:9px;border-radius:50%;background-color:#ffb94f;"></span></td>
+                    <td style="padding-right:5px;"><span style="display:block;width:9px;height:9px;border-radius:50%;background-color:#ac98ff;"></span></td>
+                    <td style="padding-right:10px;"><span style="display:block;width:9px;height:9px;border-radius:50%;background-color:#62c79b;"></span></td>
+                    <td style="font-size:12px;line-height:16px;font-weight:900;letter-spacing:1.4px;color:#111217;">COLOR CLUB</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="overflow:hidden;border:1px solid #e7e6e1;border-radius:34px;background-color:#ffffff;box-shadow:0 14px 30px rgba(17,18,23,0.12);">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td style="padding:28px;background-color:#ac98ff;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td valign="top">
+                            <div style="display:inline-block;width:58px;height:58px;border-radius:21px;background-color:#62c79b;text-align:center;font-size:30px;line-height:58px;font-weight:900;color:#111217;">✓</div>
+                          </td>
+                          <td align="right" valign="top">
+                            <div style="display:inline-block;width:54px;height:54px;border:14px solid #ffc455;border-radius:50%;"></div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colspan="2" style="padding-top:34px;">
+                            <div style="margin-bottom:7px;font-size:11px;line-height:15px;font-weight:900;letter-spacing:1.2px;color:#111217;opacity:0.62;">UN ÚLTIMO PASO</div>
+                            <h1 style="max-width:430px;margin:0;font-size:38px;line-height:41px;font-weight:900;letter-spacing:-1.4px;color:#111217;">Confirma tu cuenta</h1>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="padding:30px 28px 28px;">
+                      <p style="margin:0 0 12px;font-size:17px;line-height:26px;font-weight:700;color:#111217;">Ya casi estás dentro.</p>
+                      <p style="margin:0 0 26px;font-size:15px;line-height:23px;color:#777771;">Confirma tu correo para crear clubs, participar en retos y compartir tus collages de color.</p>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td style="border-radius:23px;background-color:#111217;">
+                            <a href="{{ .ConfirmationURL }}" style="display:block;padding:10px 10px 10px 20px;color:#ffffff;text-decoration:none;">
+                              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                  <td style="font-size:16px;line-height:22px;font-weight:900;color:#ffffff;">Confirmar mi cuenta</td>
+                                  <td width="44" align="center" style="width:44px;height:44px;border-radius:18px;background-color:#ffc455;font-size:22px;line-height:44px;font-weight:700;color:#111217;">→</td>
+                                </tr>
+                              </table>
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px;">
+                        <tr>
+                          <td style="padding:16px;border-radius:20px;background-color:#f8f8f5;">
+                            <p style="margin:0 0 6px;font-size:12px;line-height:17px;font-weight:800;color:#111217;">¿El botón no funciona?</p>
+                            <p style="margin:0 0 8px;font-size:12px;line-height:17px;color:#777771;">Copia y pega este enlace en tu navegador:</p>
+                            <a href="{{ .ConfirmationURL }}" style="font-size:11px;line-height:16px;color:#111217;text-decoration:underline;word-break:break-all;">{{ .ConfirmationURL }}</a>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <p style="margin:24px 0 0;font-size:12px;line-height:18px;color:#777771;">Si no has creado una cuenta en Color Club, puedes ignorar este correo.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding:20px 18px 0;font-size:11px;line-height:17px;color:#777771;">
+                Color Club · Retos fotográficos para compartir color con tus amigos
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

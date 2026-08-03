@@ -58,6 +58,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test
+        run: npm test
+
       - name: Set unique build numbers
         run: |
           node - <<'NODE'

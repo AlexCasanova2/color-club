@@ -1,6 +1,6 @@
 # Color Club: guía de estilo visual para web
 
-Esta guía define la identidad visual de Color Club para trasladarla de la app móvil a una experiencia web coherente. La web debe sentirse como el mismo producto, no como un dashboard genérico con los mismos colores.
+Esta guía define la identidad visual de Color Club para trasladarla de la app móvil a cualquier experiencia web futura. La web debe sentirse como el mismo producto, no como un dashboard genérico con los mismos colores.
 
 ## 1. Personalidad de marca
 
@@ -62,9 +62,11 @@ Estos colores están elegidos para permitir texto `ink` encima. No deben sustitu
 
 ### Colores de los retos
 
-Los colores asignables a un reto son más intensos y representan el objeto del juego, no la interfaz:
+Los colores seleccionables manualmente para un reto son más intensos y representan el objeto del juego, no la interfaz:
 
 `#E84A3C`, `#3157D5`, `#F4C542`, `#3A8D67`, `#E75A9D`, `#F27C38`, `#7450A8`, `#E9E6DF`.
+
+La asignación aleatoria del backend puede usar además `#30B7C2`, `#9C6ADE`, `#6B4F3A` y `#111217`. Estos cuatro colores no aparecen actualmente en el selector manual. En fondos oscuros, especialmente `#111217`, debe usarse texto blanco con contraste verificado; no asumir siempre texto `ink` como con los colores de club.
 
 No mezclar esta paleta con la identidad pastel de los clubs.
 
@@ -354,6 +356,9 @@ El color y el icono forman una unidad de identidad. Deben aparecer juntos en Hom
 - Dos fotos: una columna y dos filas.
 - Cuatro fotos: dos columnas y dos filas.
 - Seis fotos: dos columnas y tres filas.
+- Ocho fotos: dos columnas y cuatro filas.
+- Diez fotos: dos columnas y cinco filas.
+- Doce fotos: tres columnas y cuatro filas.
 - Sin gaps entre imágenes.
 - Marco exterior con radio `18-22px` cuando esté dentro de una card.
 - Visor completo sobre fondo `ink`.
@@ -486,7 +491,9 @@ El feedback debe indicar qué ocurrió y qué puede hacer el usuario después.
 - ¿El foco de teclado es visible?
 - ¿La composición se siente propia de Color Club y no de una plantilla SaaS?
 
-## 17. Ejemplo de card de club
+## 17. Ejemplo visual de card de club
+
+Esta card sirve para mockups y explicaciones promocionales. No implica que los clubs tengan una ruta pública o sean interactivos en la web.
 
 ```html
 <article class="club-card" style="--club-color: #ac98ff">
@@ -497,7 +504,7 @@ El feedback debe indicar qué ocurrió y qué puede hacer el usuario después.
   <h3>Viernes de color</h3>
   <footer>
     <span>AB12CD34</span>
-    <a href="/clubs/club-id" aria-label="Abrir Viernes de color">→</a>
+    <span class="club-card__arrow" aria-hidden="true">→</span>
   </footer>
 </article>
 ```
@@ -543,7 +550,7 @@ El feedback debe indicar qué ocurrió y qué puede hacer el usuario después.
   font-weight: 700;
 }
 
-.club-card footer a {
+.club-card__arrow {
   width: 38px;
   height: 38px;
   border-radius: 50%;
@@ -551,7 +558,6 @@ El feedback debe indicar qué ocurrió y qué puede hacer el usuario después.
   place-items: center;
   background: rgb(255 255 255 / 54%);
   color: var(--color-ink);
-  text-decoration: none;
 }
 ```
 

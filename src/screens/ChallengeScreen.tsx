@@ -9,6 +9,7 @@ import { ActivityIndicator, Alert, Animated, Image, Modal, PanResponder, Pressab
 import { Ionicons } from '@expo/vector-icons';
 import { Body, Button, Card, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
 import { advanceChallenge, castVote, deletePhoto, getChallenge, submitCollage, uploadPhoto } from '@/lib/api';
+import { collageLayout } from '@/lib/challengeRules';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import { subscribeToResync } from '@/lib/resilience';
@@ -30,15 +31,6 @@ function readableTextColor(hex: string) {
   const green = parseInt(clean.slice(2, 4), 16);
   const blue = parseInt(clean.slice(4, 6), 16);
   return (red * 299 + green * 587 + blue * 114) / 1000 > 150 ? colors.ink : colors.white;
-}
-
-function collageLayout(photoCount: number) {
-  if (photoCount === 2) return { aspectRatio: 9 / 16, columns: 1, rows: 2, slotAspectRatio: 9 / 8 };
-  if (photoCount === 4) return { aspectRatio: 9 / 16, columns: 2, rows: 2, slotAspectRatio: 9 / 16 };
-  if (photoCount === 6) return { aspectRatio: 9 / 16, columns: 2, rows: 3, slotAspectRatio: 27 / 32 };
-  const rows = Math.ceil(photoCount / 2);
-  const aspectRatio = 1.44 / rows;
-  return { aspectRatio, columns: 2, rows, slotAspectRatio: aspectRatio * rows / 2 };
 }
 
 function Collage({ participant, photoCount = 6, showSlotNumbers = false, style }: { participant: Participant; photoCount?: number; showSlotNumbers?: boolean; style?: ViewStyle }) {

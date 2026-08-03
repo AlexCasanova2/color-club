@@ -1,5 +1,22 @@
 # App de Retos de Color con Amigos — Spec de Desarrollo
 
+> **Documento histórico.** Esta fue la especificación inicial de v1 y no describe por sí sola el producto actual. Para implementar o modificar comportamiento, la fuente de verdad es: migraciones y RLS, código y tipos actuales, `README.md` y, por último, este documento.
+
+## Estado Implementado Frente A La Spec Inicial
+
+- Los retos admiten 2, 4, 6, 8, 10 o 12 fotos, no solo 6.
+- Las duraciones disponibles son 30 minutos, 2 horas, 6 horas, 24 horas, 48 horas y 1 semana.
+- Los clubs tienen un máximo de 12 miembros activos y roles `member`, `moderator` y `admin`; el propietario principal sigue identificado por `clubs.admin_id`.
+- La política de creación de retos puede permitir administradores, administradores y moderadores, o todos los miembros.
+- El cliente implementa login y registro con email y contraseña, además de recuperación; no implementa magic link.
+- Los retos se inician inmediatamente desde la interfaz. El backend soporta `begins_at`, pero el inicio programado no está expuesto en el cliente.
+- Si hay dos o menos collages enviados, el reto se cierra directamente y no abre votación.
+- El avance de retos, temporadas y notificaciones periódicas se implementa con funciones PostgreSQL para Scheduler/Cron. La Edge Function existente se ocupa del envío push.
+- Existen push de reactivación, chat, amistades, invitaciones pendientes, perfiles públicos, administración avanzada, funcionamiento resiliente/offline y personalización de clubs.
+- El histórico de temporadas está modelado, pero el cliente actual solo presenta la temporada activa.
+
+Las secciones siguientes se conservan como registro de las decisiones originales; cualquier contradicción queda sustituida por los puntos anteriores.
+
 ## 1. Concepto
 
 App social donde grupos cerrados de amigos ("clubs") compiten en retos fotográficos temáticos por color. Cada reto asigna un color (aleatorio o compartido) y los participantes deben subir un collage de 6 fotos con ese color predominante. Al cerrar el plazo, los miembros votan los collages ajenos y se genera un ranking. Los clubs acumulan puntuación histórica organizada en "temporadas".
