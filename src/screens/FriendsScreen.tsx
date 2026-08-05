@@ -94,7 +94,7 @@ export function FriendsScreen({ userId, onOpenProfile }: { userId: string; onOpe
   const sent = relationships.filter((item) => item.status === 'pending' && item.requester_id === userId);
 
   return (
-    <Screen>
+    <Screen stickyHeader>
       <Header title="Color Club" />
       <View style={styles.heading}><Title>Amigos</Title><Body muted>Añade a alguien usando su nombre exacto o su código público.</Body></View>
       <Card style={styles.searchCard}>

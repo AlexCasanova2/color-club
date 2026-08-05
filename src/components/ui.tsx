@@ -1,4 +1,4 @@
-import { useEffect, useRef, type PropsWithChildren, type ReactNode } from 'react';
+import { Children, useEffect, useRef, type PropsWithChildren, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -18,10 +18,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/lib/theme';
 
 export function Screen({ children, scroll = true, bottomInset = 112, stickyHeader = false }: PropsWithChildren<{ scroll?: boolean; bottomInset?: number; stickyHeader?: boolean }>) {
+  const content = Children.toArray(children);
   return (
     <View style={styles.safe}>
       <SafeAreaView style={styles.topSafe} />
-      {scroll ? (
+      {scroll && stickyHeader ? (
+        <View style={styles.stickyBody}>
+          <ScrollView
+            automaticallyAdjustKeyboardInsets
+            contentContainerStyle={[styles.screen, styles.stickyScreen, { paddingBottom: bottomInset }]}
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+          >
+            {content.slice(1)}
+          </ScrollView>
+          <View style={styles.fixedHeader}>{content[0]}</View>
+        </View>
+      ) : scroll ? (
         <ScrollView
           automaticallyAdjustKeyboardInsets
           contentContainerStyle={[styles.screen, { paddingBottom: bottomInset }]}
@@ -29,7 +44,6 @@ export function Screen({ children, scroll = true, bottomInset = 112, stickyHeade
           keyboardShouldPersistTaps="handled"
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
-          stickyHeaderIndices={stickyHeader ? [0] : undefined}
         >
           {children}
         </ScrollView>
@@ -165,6 +179,9 @@ const styles = StyleSheet.create({
   topSafe: { backgroundColor: colors.paper },
   screen: { flexGrow: 1, paddingHorizontal: 18 },
   fixedScreen: { flex: 1 },
+  stickyBody: { flex: 1 },
+  stickyScreen: { paddingTop: 74 },
+  fixedHeader: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 18, zIndex: 20, elevation: 20 },
   eyebrow: { color: colors.muted, fontSize: 13, fontWeight: '500', marginBottom: 7 },
   title: { color: colors.ink, fontSize: 40, lineHeight: 43, fontWeight: '800', letterSpacing: -1.5 },
   titleMedium: { fontSize: 27, lineHeight: 31, letterSpacing: -0.8 },

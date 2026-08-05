@@ -169,7 +169,7 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
   const isClubFull = memberUserIds.length >= clubMemberLimit;
 
   return (
-    <Screen>
+    <Screen stickyHeader>
       <Header title={club.name} onBack={onBack} />
       <View style={[styles.hero, { backgroundColor: club.theme_color || colors.lavender }]}>
         <View style={styles.heroCopy}>
@@ -238,7 +238,19 @@ export function ClubScreen({ clubId, userId, onBack, onChallenge, onNewChallenge
             </View>
             <Ionicons color={colors.ink} name="chevron-forward" size={22} />
           </Pressable>
-          {club.admin_id === userId && <Button label="Lanzar un nuevo reto" onPress={onNewChallenge} />}
+          {canCreateChallenge && (
+            <Pressable accessibilityLabel="Lanzar un nuevo reto" accessibilityRole="button" onPress={onNewChallenge} style={({ pressed }) => [styles.newChallengeCta, pressed && styles.newChallengeCtaPressed]}>
+              <View pointerEvents="none" style={styles.newChallengeShape} />
+              <View pointerEvents="none" style={styles.newChallengeRing} />
+              <View style={styles.newChallengeIcon}><Ionicons color={colors.ink} name="sparkles" size={23} /></View>
+              <View style={styles.newChallengeCopy}>
+                <Text style={styles.newChallengeKicker}>SIGUIENTE PARTIDA</Text>
+                <Text style={styles.newChallengeTitle}>Lanzar un nuevo reto</Text>
+                <Text style={styles.newChallengeMeta}>Elige el color y vuelve a poner el club en marcha.</Text>
+              </View>
+              <View style={styles.newChallengeArrow}><Ionicons color={colors.ink} name="arrow-forward" size={21} /></View>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -335,6 +347,16 @@ const styles = StyleSheet.create({
   lastResultCopy: { flex: 1 },
   lastResultTitle: { color: colors.ink, fontSize: 18, fontWeight: '900' },
   lastResultMeta: { color: colors.ink, opacity: 0.65, fontSize: 12, marginTop: 2 },
+  newChallengeCta: { minHeight: 118, padding: 18, borderRadius: 28, backgroundColor: colors.ink, flexDirection: 'row', alignItems: 'center', gap: 14, overflow: 'hidden', shadowColor: colors.ink, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 8 },
+  newChallengeCtaPressed: { opacity: 0.78, transform: [{ translateY: 1 }] },
+  newChallengeShape: { position: 'absolute', right: 42, top: -44, width: 100, height: 100, borderRadius: 32, backgroundColor: colors.lavender, opacity: 0.34, transform: [{ rotate: '20deg' }] },
+  newChallengeRing: { position: 'absolute', right: -22, bottom: -28, width: 90, height: 90, borderRadius: 45, borderWidth: 18, borderColor: colors.pink, opacity: 0.5 },
+  newChallengeIcon: { width: 52, height: 52, borderRadius: 19, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  newChallengeCopy: { flex: 1, zIndex: 2 },
+  newChallengeKicker: { color: colors.yellow, fontSize: 10, lineHeight: 14, fontWeight: '900', letterSpacing: 1.1, marginBottom: 3 },
+  newChallengeTitle: { color: colors.white, fontSize: 19, lineHeight: 23, fontWeight: '900', letterSpacing: -0.3 },
+  newChallengeMeta: { color: '#FFFFFFB3', fontSize: 11, lineHeight: 15, fontWeight: '600', marginTop: 4, maxWidth: 220 },
+  newChallengeArrow: { width: 44, height: 44, borderRadius: 18, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   pressed: { opacity: 0.72 },
   rankingHeader: { marginTop: 22, marginBottom: 12, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   rule: { color: colors.muted, fontSize: 12 },

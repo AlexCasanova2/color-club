@@ -96,7 +96,7 @@ export function AccountScreen({ userId, email, onEditProfile, onSignOut, onViewP
   const value = (key: BooleanSetting, fallback = true) => profile?.[key] ?? fallback;
 
   return (
-    <Screen>
+    <Screen stickyHeader>
       <Header title="Cuenta" />
       <View style={styles.heading}><Title>Tu perfil</Title><Body muted>Gestiona cómo apareces y cómo quieres usar Color Club.</Body></View>
       <ErrorText message={error} />

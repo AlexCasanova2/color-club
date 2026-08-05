@@ -143,7 +143,7 @@ export function ActivityScreen({ userId, onOpenChallenge, onOpenClub, onOpenFrie
   }
 
   return (
-    <Screen>
+    <Screen stickyHeader>
       <Header title="Color Club" />
       <View style={styles.heading}>
         <View style={styles.headingShape} />
