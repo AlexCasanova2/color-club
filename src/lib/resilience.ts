@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File, Paths } from 'expo-file-system';
 
 const cachePrefix = 'color-club:read-cache:v1:';
 const listeners = new Set<() => void>();
@@ -90,4 +91,20 @@ export async function clearReadCache() {
   const keys = await AsyncStorage.getAllKeys();
   const cachedKeys = keys.filter((key) => key.startsWith(cachePrefix) || key.startsWith('collage-draft:'));
   if (cachedKeys.length) await AsyncStorage.multiRemove(cachedKeys);
+}
+
+export async function clearLocalUserData(userId: string) {
+  const keys = await AsyncStorage.getAllKeys();
+  const userKeys = keys.filter((key) =>
+    (key.startsWith('collage-draft:') || key.startsWith('color-reveal:') || key.startsWith(cachePrefix))
+    && (key.includes(userId) || key.startsWith(cachePrefix)),
+  );
+  if (userKeys.length) await AsyncStorage.multiRemove(userKeys);
+  try {
+    for (const entry of Paths.document.list()) {
+      if (entry instanceof File && entry.name.startsWith('collage-draft-') && entry.name.endsWith(`-${userId}.jpg`)) entry.delete();
+    }
+  } catch {
+    // Local cleanup is best effort after server-side data has been removed.
+  }
 }

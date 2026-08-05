@@ -18,6 +18,7 @@ const durations: Array<{ value: DurationPreset; label: string }> = [
 ];
 const photoCounts = [2, 4, 6, 8, 10, 12];
 const roleLabel = { admin: 'Admin', moderator: 'Moderador', member: 'Miembro' };
+const memberName = (member: ClubMember) => member.profiles?.display_name ?? 'Usuario bloqueado';
 
 export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProfile }: { clubId: string; userId: string; onBack: () => void; onDeleted: () => void; onOpenProfile: (userId: string) => void }) {
   const [club, setClub] = useState<Club | null>(null);
@@ -68,21 +69,22 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
 
   function confirmRole(member: ClubMember) {
     const nextRole: ClubMember['role'] = member.role === 'member' ? 'moderator' : member.role === 'moderator' ? 'admin' : 'member';
-    Alert.alert('Cambiar rol', `¿Quieres hacer a ${member.profiles.display_name} ${roleLabel[nextRole].toLowerCase()}?`, [
+    Alert.alert('Cambiar rol', `¿Quieres hacer a ${memberName(member)} ${roleLabel[nextRole].toLowerCase()}?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Cambiar', onPress: async () => { try { await setClubMemberRole(member.id, nextRole); await load(); } catch (caught) { setError((caught as Error).message); } } },
     ]);
   }
 
   function confirmRemove(member: ClubMember) {
-    Alert.alert('Eliminar usuario', `¿Eliminar a ${member.profiles.display_name} del club?`, [
+    Alert.alert('Eliminar usuario', `¿Eliminar a ${memberName(member)} del club?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: async () => { try { await removeClubMember(member.id); await load(); } catch (caught) { setError((caught as Error).message); } } },
     ]);
   }
 
   function confirmTransfer(member: ClubMember) {
-    Alert.alert('Transferir administración', `${member.profiles.display_name} será el admin principal del grupo.`, [
+    if (!member.profiles) return;
+    Alert.alert('Transferir administración', `${memberName(member)} será el admin principal del grupo.`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Transferir', onPress: async () => { try { await transferClubAdmin(clubId, member.user_id); await load(); } catch (caught) { setError((caught as Error).message); } } },
     ]);
@@ -170,17 +172,17 @@ export function ClubManageScreen({ clubId, userId, onBack, onDeleted, onOpenProf
       <View style={styles.membersList}>
         {members.map((member) => (
           <View key={member.id} style={styles.memberRow}>
-            <Pressable onPress={() => onOpenProfile(member.user_id)} style={({ pressed }) => [styles.memberIdentity, pressed && styles.pressed]}>
-              <View style={styles.avatar}>{member.profiles.avatar_url ? <Image source={{ uri: member.profiles.avatar_url }} style={styles.avatarImage} /> : <Text style={[styles.initial, { backgroundColor: member.profiles.avatar_color ?? colors.ink }]}>{member.profiles.display_name.charAt(0).toUpperCase()}</Text>}</View>
+            <Pressable disabled={!member.profiles} onPress={() => onOpenProfile(member.user_id)} style={({ pressed }) => [styles.memberIdentity, pressed && styles.pressed]}>
+              <View style={styles.avatar}>{member.profiles?.avatar_url ? <Image source={{ uri: member.profiles.avatar_url }} style={styles.avatarImage} /> : <Text style={[styles.initial, { backgroundColor: member.profiles?.avatar_color ?? colors.ink }]}>{memberName(member).charAt(0).toUpperCase()}</Text>}</View>
               <View style={styles.memberCopy}>
-                <Text style={styles.memberName}>{member.profiles.display_name}{member.user_id === userId ? ' (tú)' : ''}</Text>
-                <Text style={styles.memberMeta}>@{member.profiles.username} · {roleLabel[member.role]}</Text>
+                <Text style={styles.memberName}>{memberName(member)}{member.user_id === userId ? ' (tú)' : ''}</Text>
+                <Text style={styles.memberMeta}>{member.profiles ? `@${member.profiles.username} · ` : ''}{roleLabel[member.role]}</Text>
               </View>
             </Pressable>
             <Pressable onPress={() => confirmRole(member)} style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
               <Ionicons color={colors.ink} name={member.role === 'admin' ? 'shield-checkmark' : 'shield-outline'} size={20} />
             </Pressable>
-            {member.user_id !== userId && <Pressable onPress={() => confirmTransfer(member)} style={({ pressed }) => [styles.iconButton, styles.transferIconButton, pressed && styles.pressed]}><Ionicons color={colors.ink} name="key-outline" size={18} /></Pressable>}
+            {member.user_id !== userId && member.profiles && <Pressable onPress={() => confirmTransfer(member)} style={({ pressed }) => [styles.iconButton, styles.transferIconButton, pressed && styles.pressed]}><Ionicons color={colors.ink} name="key-outline" size={18} /></Pressable>}
             {member.user_id !== userId && (
               <Pressable onPress={() => confirmRemove(member)} style={({ pressed }) => [styles.iconButton, styles.dangerIconButton, pressed && styles.pressed]}>
                 <Ionicons color={colors.danger} name="trash-outline" size={19} />

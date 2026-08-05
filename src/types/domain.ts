@@ -1,6 +1,8 @@
 export type ChallengeStatus = 'configuring' | 'active' | 'voting' | 'closed';
 export type DurationPreset = '30min' | '2h' | '6h' | '24h' | '48h' | '1week';
 export type ClubIcon = 'color-palette-outline' | 'camera-outline' | 'sparkles-outline' | 'people-outline' | 'heart-outline' | 'planet-outline' | 'sunny-outline' | 'flower-outline';
+export type ReportSubjectType = 'profile' | 'club_message' | 'collage';
+export type ReportReason = 'harassment' | 'hate' | 'sexual_content' | 'violence' | 'privacy' | 'spam' | 'other';
 
 export interface Profile {
   id: string;
@@ -61,7 +63,7 @@ export interface ClubMember {
   status: 'active' | 'left';
   role: 'member' | 'moderator' | 'admin';
   joined_at: string;
-  profiles: Profile;
+  profiles: Profile | null;
 }
 
 export interface ClubMessage {
@@ -70,7 +72,7 @@ export interface ClubMessage {
   sender_id: string;
   body: string;
   created_at: string;
-  profiles: Profile;
+  profiles: Profile | null;
 }
 
 export interface Challenge {
@@ -96,7 +98,7 @@ export interface Participant {
   assigned_color: string | null;
   status: 'pending' | 'submitted' | 'disqualified';
   submitted_at: string | null;
-  profiles: Profile;
+  profiles: Profile | null;
   photos?: Photo[];
 }
 

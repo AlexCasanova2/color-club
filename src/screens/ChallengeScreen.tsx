@@ -8,8 +8,9 @@ import { Image as ExpoImage } from 'expo-image';
 import { ActivityIndicator, Alert, Animated, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Body, Button, Card, ErrorText, Eyebrow, Header, Screen, Title } from '@/components/ui';
-import { advanceChallenge, castVote, deletePhoto, getChallenge, submitCollage, uploadPhoto } from '@/lib/api';
+import { advanceChallenge, blockUser, castVote, deletePhoto, getChallenge, reportUser, submitCollage, uploadPhoto } from '@/lib/api';
 import { collageLayout } from '@/lib/challengeRules';
+import { chooseReportReason } from '@/lib/safety';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import { subscribeToResync } from '@/lib/resilience';
@@ -31,6 +32,11 @@ function readableTextColor(hex: string) {
   const green = parseInt(clean.slice(2, 4), 16);
   const blue = parseInt(clean.slice(4, 6), 16);
   return (red * 299 + green * 587 + blue * 114) / 1000 > 150 ? colors.ink : colors.white;
+}
+
+function participantName(participant: Participant, viewerId: string) {
+  if (participant.user_id === viewerId) return participant.profiles?.display_name ?? 'Tú';
+  return participant.profiles?.display_name ?? 'Usuario bloqueado';
 }
 
 function Collage({ participant, photoCount = 6, showSlotNumbers = false, style }: { participant: Participant; photoCount?: number; showSlotNumbers?: boolean; style?: ViewStyle }) {
@@ -422,6 +428,37 @@ export function ChallengeScreen({ challengeId, userId, onBack, onSubmitted }: { 
     setBusy(null);
   }
 
+  async function reportCollage(participant: Participant, reason: Parameters<typeof reportUser>[3]) {
+    setError(null);
+    try {
+      await reportUser(participant.user_id, 'collage', participant.id, reason);
+      Alert.alert('Denuncia enviada', 'Conservamos una referencia del collage para revisarlo.');
+    } catch (caught) { setError((caught as Error).message); }
+  }
+
+  function confirmBlockParticipant(participant: Participant) {
+    Alert.alert('Bloquear usuario', 'Dejaréis de ver vuestros perfiles, mensajes y collages. La pertenencia al club no cambia.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Bloquear', style: 'destructive', onPress: async () => {
+        try {
+          await blockUser(participant.user_id);
+          setViewingParticipant(null);
+          setParticipants((current) => current.map((item) => item.user_id === participant.user_id ? { ...item, profiles: null, photos: [] } : item));
+          await load(true);
+        } catch (caught) { setError((caught as Error).message); }
+      } },
+    ]);
+  }
+
+  function openCollageSafety(participant: Participant) {
+    if (participant.user_id === userId || !participant.profiles) return;
+    Alert.alert('Seguridad del collage', `Acciones sobre el contenido de ${participantName(participant, userId)}.`, [
+      { text: 'Denunciar collage', onPress: () => chooseReportReason((reason) => void reportCollage(participant, reason)) },
+      { text: 'Bloquear usuario', style: 'destructive', onPress: () => confirmBlockParticipant(participant) },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }
+
   if (loading || !challenge || !me) return <Screen><Header title="Reto" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /><ErrorText message={error} /></Screen>;
 
   const completed = me.photos?.length ?? 0;
@@ -430,7 +467,7 @@ export function ChallengeScreen({ challengeId, userId, onBack, onSubmitted }: { 
     if (first.user_id === userId) return -1;
     if (second.user_id === userId) return 1;
     if (first.status !== second.status) return first.status === 'submitted' ? -1 : 1;
-    return first.profiles.display_name.localeCompare(second.profiles.display_name);
+    return participantName(first, userId).localeCompare(participantName(second, userId));
   });
   const submissionProgress = participants.length ? `${(submitted / participants.length) * 100}%` as `${number}%` : '0%';
   const photoCount = challenge.photo_count ?? 6;
@@ -655,13 +692,13 @@ export function ChallengeScreen({ challengeId, userId, onBack, onSubmitted }: { 
           <View>
             {waitingParticipants.map((participant, participantIndex) => {
               const isSubmitted = participant.status === 'submitted';
-              const displayName = participant.profiles.display_name;
+              const displayName = participantName(participant, userId);
               return (
                 <View key={participant.id} style={[styles.participantRow, participantIndex === waitingParticipants.length - 1 && styles.participantRowLast]}>
-                  {participant.profiles.avatar_url ? (
+                  {participant.profiles?.avatar_url ? (
                     <Image source={{ uri: participant.profiles.avatar_url }} style={styles.participantAvatar} />
                   ) : (
-                    <View style={[styles.participantAvatar, styles.participantAvatarFallback, { backgroundColor: participant.profiles.avatar_color || colors.lavender }]}>
+                    <View style={[styles.participantAvatar, styles.participantAvatarFallback, { backgroundColor: participant.profiles?.avatar_color || colors.lavender }]}>
                       <Text style={styles.participantInitial}>{displayName.trim().charAt(0).toUpperCase()}</Text>
                     </View>
                   )}
@@ -721,19 +758,20 @@ export function ChallengeScreen({ challengeId, userId, onBack, onSubmitted }: { 
           {candidates.map((participant) => (
             <Card key={participant.id} style={participant.status === 'disqualified' ? { ...styles.candidateCard, ...styles.disqualified } : styles.candidateCard}>
               <View style={styles.candidateHeader}>
-                {participant.profiles.avatar_url ? <Image source={{ uri: participant.profiles.avatar_url }} style={styles.candidateAvatar} /> : (
-                  <View style={[styles.candidateAvatar, styles.candidateAvatarFallback, { backgroundColor: participant.profiles.avatar_color || colors.lavender }]}><Text style={styles.candidateInitial}>{participant.profiles.display_name.trim().charAt(0).toUpperCase()}</Text></View>
-                )}
-                <View style={styles.candidateIdentity}><Text style={styles.candidateName}>{participant.profiles.display_name}</Text><Text style={styles.candidateSubtitle}>{participant.status === 'disqualified' ? 'No completó el reto' : 'Collage final'}</Text></View>
-                {votedId === participant.id && <View style={styles.voteBadge}><Ionicons color={colors.ink} name="checkmark" size={16} /><Text style={styles.voteBadgeText}>Tu voto</Text></View>}
-              </View>
-              {participant.status === 'submitted' && (
-                <Pressable accessibilityLabel={`Ampliar collage de ${participant.profiles.display_name}`} accessibilityRole="button" onPress={() => setViewingParticipant(participant)} style={({ pressed }) => [styles.candidateCollageWrap, pressed && styles.pressedSlot]}>
+                 {participant.profiles?.avatar_url ? <Image source={{ uri: participant.profiles.avatar_url }} style={styles.candidateAvatar} /> : (
+                   <View style={[styles.candidateAvatar, styles.candidateAvatarFallback, { backgroundColor: participant.profiles?.avatar_color || colors.lavender }]}><Text style={styles.candidateInitial}>{participantName(participant, userId).trim().charAt(0).toUpperCase()}</Text></View>
+                 )}
+                 <View style={styles.candidateIdentity}><Text style={styles.candidateName}>{participantName(participant, userId)}</Text><Text style={styles.candidateSubtitle}>{participant.status === 'disqualified' ? 'No completó el reto' : participant.profiles ? 'Collage final' : 'Contenido oculto'}</Text></View>
+                 {votedId === participant.id && <View style={styles.voteBadge}><Ionicons color={colors.ink} name="checkmark" size={16} /><Text style={styles.voteBadgeText}>Tu voto</Text></View>}
+                 {participant.profiles && <Pressable accessibilityLabel="Opciones de seguridad del collage" onPress={() => openCollageSafety(participant)} style={styles.safetyIcon}><Ionicons color={colors.ink} name="ellipsis-horizontal" size={20} /></Pressable>}
+               </View>
+               {participant.status === 'submitted' && participant.profiles && (
+                 <Pressable accessibilityLabel={`Ampliar collage de ${participantName(participant, userId)}`} accessibilityRole="button" onPress={() => setViewingParticipant(participant)} style={({ pressed }) => [styles.candidateCollageWrap, pressed && styles.pressedSlot]}>
                   <Collage participant={participant} photoCount={photoCount} style={styles.candidateCollage} />
                   <View style={styles.expandBadge}><Ionicons color={colors.white} name="expand-outline" size={17} /><Text style={styles.expandText}>Ver en grande</Text></View>
                 </Pressable>
               )}
-              {participant.status === 'submitted' && !votedId && me.status === 'submitted' && <View style={styles.candidateAction}><Button label="Votar este collage" onPress={() => vote(participant.id)} loading={busy === 'vote'} /></View>}
+               {participant.status === 'submitted' && participant.profiles && !votedId && me.status === 'submitted' && <View style={styles.candidateAction}><Button label="Votar este collage" onPress={() => vote(participant.id)} loading={busy === 'vote'} /></View>}
             </Card>
           ))}
         </View>
@@ -778,18 +816,19 @@ export function ChallengeScreen({ challengeId, userId, onBack, onSubmitted }: { 
           const position = participant.score === previousScore ? previousPosition : index + 1;
           previousScore = participant.score;
           previousPosition = position;
-          const voterNames = votes.filter((voteItem) => voteItem.voted_participant_id === participant.id).map((voteItem) => participants.find((item) => item.user_id === voteItem.voter_id)?.profiles.display_name).filter(Boolean);
+          const voterNames = votes.filter((voteItem) => voteItem.voted_participant_id === participant.id).map((voteItem) => participants.find((item) => item.user_id === voteItem.voter_id)?.profiles?.display_name).filter(Boolean);
           return (
             <Card key={participant.id} style={{ ...styles.resultCard, ...(position === 1 && participant.status === 'submitted' ? styles.winnerCard : {}), ...(participant.status === 'disqualified' ? styles.disqualified : {}) }}>
               <View style={styles.resultHeader}>
                 <View style={[styles.resultPosition, position === 1 && participant.status === 'submitted' && styles.winnerPosition]}><Text style={styles.resultPositionText}>{participant.status === 'disqualified' ? '—' : `#${position}`}</Text></View>
-                {participant.profiles.avatar_url ? <Image source={{ uri: participant.profiles.avatar_url }} style={styles.resultAvatar} /> : <View style={[styles.resultAvatar, styles.candidateAvatarFallback, { backgroundColor: participant.profiles.avatar_color || colors.lavender }]}><Text style={styles.candidateInitial}>{participant.profiles.display_name.trim().charAt(0).toUpperCase()}</Text></View>}
-                <View style={styles.resultIdentity}><Text style={styles.candidateName}>{participant.profiles.display_name}</Text><Text style={styles.voteCount}>{participant.status === 'disqualified' ? 'No completó' : `${participant.score} voto${participant.score === 1 ? '' : 's'}`}</Text></View>
+                {participant.profiles?.avatar_url ? <Image source={{ uri: participant.profiles.avatar_url }} style={styles.resultAvatar} /> : <View style={[styles.resultAvatar, styles.candidateAvatarFallback, { backgroundColor: participant.profiles?.avatar_color || colors.lavender }]}><Text style={styles.candidateInitial}>{participantName(participant, userId).trim().charAt(0).toUpperCase()}</Text></View>}
+                <View style={styles.resultIdentity}><Text style={styles.candidateName}>{participantName(participant, userId)}</Text><Text style={styles.voteCount}>{participant.status === 'disqualified' ? 'No completó' : participant.profiles ? `${participant.score} voto${participant.score === 1 ? '' : 's'}` : 'Contenido oculto'}</Text></View>
                 {position === 1 && participant.status === 'submitted' && <Ionicons color={colors.ink} name="trophy" size={22} />}
+                {participant.user_id !== userId && participant.profiles && <Pressable accessibilityLabel="Opciones de seguridad del collage" onPress={() => openCollageSafety(participant)} style={styles.safetyIcon}><Ionicons color={colors.ink} name="ellipsis-horizontal" size={20} /></Pressable>}
               </View>
-              {participant.status === 'submitted' && (
+              {participant.status === 'submitted' && participant.profiles && (
                 <Pressable
-                  accessibilityLabel={`Ampliar collage de ${participant.profiles.display_name}`}
+                  accessibilityLabel={`Ampliar collage de ${participantName(participant, userId)}`}
                   accessibilityRole="button"
                   onPress={() => setViewingParticipant(participant)}
                   style={({ pressed }) => [styles.resultCollageWrap, pressed && styles.pressedSlot]}
@@ -814,6 +853,7 @@ export function ChallengeScreen({ challengeId, userId, onBack, onSubmitted }: { 
 
 const styles = StyleSheet.create({
   loader: { marginTop: 100 },
+  safetyIcon: { width: 40, height: 40, borderRadius: 16, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center' },
   revealRoot: { flex: 1, backgroundColor: '#000000E8', padding: 22, justifyContent: 'center' },
   revealCard: { backgroundColor: colors.paper, borderRadius: 34, padding: 24, gap: 16, alignItems: 'center' },
   revealKicker: { color: colors.muted, fontSize: 15, fontWeight: '800' },

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Body, ErrorText, Header, Screen, Title } from '@/components/ui';
-import { getClub, getClubMessages, sendClubMessage } from '@/lib/api';
+import { blockUser, getClub, getClubMessages, reportUser, sendClubMessage } from '@/lib/api';
+import { chooseReportReason } from '@/lib/safety';
 import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import { subscribeToResync } from '@/lib/resilience';
@@ -61,25 +62,52 @@ export function ClubChatScreen({ clubId, userId, onBack }: { clubId: string; use
     setSending(false);
   }
 
+  async function reportMessage(message: ClubMessage, reason: Parameters<typeof reportUser>[3]) {
+    try {
+      await reportUser(message.sender_id, 'club_message', message.id, reason);
+      Alert.alert('Denuncia enviada', 'Conservamos una copia del mensaje para revisarlo.');
+    } catch (caught) { setError((caught as Error).message); }
+  }
+
+  function confirmBlock(message: ClubMessage) {
+    Alert.alert('Bloquear usuario', 'Dejarás de ver sus mensajes, perfil y collages. La pertenencia a clubs compartidos no cambia.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Bloquear', style: 'destructive', onPress: async () => {
+        try {
+          await blockUser(message.sender_id);
+          setMessages((current) => current.filter((item) => item.sender_id !== message.sender_id));
+        } catch (caught) { setError((caught as Error).message); }
+      } },
+    ]);
+  }
+
+  function openMessageActions(message: ClubMessage) {
+    Alert.alert('Seguridad del mensaje', 'Puedes denunciar este mensaje o bloquear a quien lo envió.', [
+      { text: 'Denunciar mensaje', onPress: () => chooseReportReason((reason) => void reportMessage(message, reason)) },
+      { text: 'Bloquear usuario', style: 'destructive', onPress: () => confirmBlock(message) },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }
+
   if (loading) return <Screen stickyHeader bottomInset={28}><Header title="Chat" onBack={onBack} /><ActivityIndicator style={styles.loader} color={colors.coral} /></Screen>;
 
   return (
     <Screen stickyHeader bottomInset={28} scroll={false}>
       <Header title="Chat" onBack={onBack} />
-      <View style={styles.heading}><Title>{club?.name ?? 'Grupo'}</Title><Body muted>Chat en vivo para integrantes del grupo.</Body></View>
+      <View style={styles.heading}><Title>{club?.name ?? 'Grupo'}</Title><Body muted>Chat en vivo para integrantes del grupo. Mantén pulsado un mensaje para denunciarlo o bloquear al usuario.</Body></View>
       <ErrorText message={error} />
       <View style={styles.chatShell}>
         <ScrollView contentContainerStyle={styles.messageList} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {messages.length === 0 ? <View style={styles.emptyChat}><Text style={styles.emptyChatTitle}>Aún no hay mensajes</Text><Text style={styles.emptyChatText}>Rompe el hielo antes del próximo reto.</Text></View> : messages.map((message) => {
             const mine = message.sender_id === userId;
             return (
-              <View key={message.id} style={[styles.messageRow, mine && styles.messageRowMine]}>
-                {!mine && <View style={styles.messageAvatar}>{message.profiles.avatar_url ? <Image source={{ uri: message.profiles.avatar_url }} style={styles.messageAvatarImage} /> : <Text style={[styles.messageInitial, { backgroundColor: message.profiles.avatar_color ?? colors.ink }]}>{message.profiles.display_name.charAt(0).toUpperCase()}</Text>}</View>}
+              <Pressable accessibilityHint={mine ? undefined : 'Mantén pulsado para ver opciones de seguridad'} disabled={mine} key={message.id} onLongPress={() => openMessageActions(message)} style={[styles.messageRow, mine && styles.messageRowMine]}>
+                {!mine && <View style={styles.messageAvatar}>{message.profiles?.avatar_url ? <Image source={{ uri: message.profiles.avatar_url }} style={styles.messageAvatarImage} /> : <Text style={[styles.messageInitial, { backgroundColor: message.profiles?.avatar_color ?? colors.ink }]}>{message.profiles?.display_name.charAt(0).toUpperCase() ?? '?'}</Text>}</View>}
                 <View style={[styles.messageBubble, mine && styles.messageBubbleMine]}>
-                  {!mine && <Text style={styles.messageName}>{message.profiles.display_name}</Text>}
+                  {!mine && <Text style={styles.messageName}>{message.profiles?.display_name ?? 'Usuario bloqueado'}</Text>}
                   <Text style={[styles.messageBody, mine && styles.messageBodyMine]}>{message.body}</Text>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </ScrollView>

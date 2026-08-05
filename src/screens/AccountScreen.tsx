@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { ToastOverlay } from '@/components/Toast';
 import { Body, Button, ErrorText, Field, Header, Screen, Title } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
+import { clearStoredPushToken } from '@/lib/pushNotifications';
+import { clearLocalUserData } from '@/lib/resilience';
 import { colors } from '@/lib/theme';
 import type { Profile } from '@/types/domain';
 
 type BooleanSetting = 'challenge_notifications' | 'friend_notifications' | 'reengagement_notifications' | 'weekly_summary' | 'allow_friend_requests' | 'profile_discoverable';
+const siteUrl = (process.env.EXPO_PUBLIC_SITE_URL ?? 'https://getcolorclub.com').replace(/\/$/, '');
 
 function SettingRow({ icon, title, description, value, onChange, last = false }: {
   icon: keyof typeof Ionicons.glyphMap;
@@ -29,7 +32,7 @@ function SettingRow({ icon, title, description, value, onChange, last = false }:
   );
 }
 
-export function AccountScreen({ userId, email, onEditProfile, onViewPublicProfile, toastMessage, onToastShown }: { userId: string; email: string; onEditProfile: () => void; onViewPublicProfile: () => void; toastMessage?: string | null; onToastShown?: () => void }) {
+export function AccountScreen({ userId, email, onEditProfile, onSignOut, onViewPublicProfile, toastMessage, onToastShown }: { userId: string; email: string; onEditProfile: () => void; onSignOut: () => void; onViewPublicProfile: () => void; toastMessage?: string | null; onToastShown?: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -78,9 +81,16 @@ export function AccountScreen({ userId, email, onEditProfile, onViewPublicProfil
     if (deleteText !== 'BORRAR') return;
     setDeleting(true);
     setError(null);
-    const { error: deleteError } = await supabase.rpc('delete_own_account', { confirmation: deleteText });
+    const { error: deleteError } = await supabase.functions.invoke('delete-account');
     if (deleteError) { setError(deleteError.message); setDeleting(false); setDeleteOpen(false); return; }
-    await supabase.auth.signOut();
+    await clearStoredPushToken(userId);
+    await clearLocalUserData(userId);
+    await supabase.auth.signOut({ scope: 'local' });
+  }
+
+  async function openSitePage(path: string) {
+    if (!siteUrl) { setError('Falta configurar la web pública de Color Club.'); return; }
+    await Linking.openURL(`${siteUrl}${path}`);
   }
 
   const value = (key: BooleanSetting, fallback = true) => profile?.[key] ?? fallback;
@@ -140,12 +150,19 @@ export function AccountScreen({ userId, email, onEditProfile, onViewPublicProfil
 
           <Text style={styles.sectionTitle}>Cuenta y seguridad</Text>
           <View style={styles.sectionCard}>
-            <Pressable onPress={() => void supabase.auth.signOut()} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}>
+            <Pressable onPress={onSignOut} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}>
               <View style={styles.settingIcon}><Ionicons color={colors.ink} name="log-out-outline" size={20} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>Cerrar sesión</Text><Text style={styles.settingDescription}>Salir de esta cuenta en el dispositivo</Text></View><Ionicons color={colors.muted} name="chevron-forward" size={18} />
             </Pressable>
             <Pressable onPress={() => { setDeleteText(''); setDeleteOpen(true); }} style={({ pressed }) => [styles.deleteRow, pressed && styles.pressed]}>
               <View style={styles.deleteIcon}><Ionicons color={colors.danger} name="trash-outline" size={20} /></View><View style={styles.settingCopy}><Text style={styles.deleteTitle}>Borrar cuenta</Text><Text style={styles.settingDescription}>Elimina permanentemente tu cuenta y tus datos</Text></View><Ionicons color={colors.danger} name="chevron-forward" size={18} />
             </Pressable>
+          </View>
+
+          <Text style={styles.sectionTitle}>Legal y ayuda</Text>
+          <View style={styles.sectionCard}>
+            <Pressable onPress={() => void openSitePage('/privacidad')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}><View style={styles.settingIcon}><Ionicons color={colors.ink} name="shield-checkmark-outline" size={20} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>Privacidad</Text><Text style={styles.settingDescription}>Cómo tratamos tus datos</Text></View><Ionicons color={colors.muted} name="open-outline" size={18} /></Pressable>
+            <Pressable onPress={() => void openSitePage('/terminos')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}><View style={styles.settingIcon}><Ionicons color={colors.ink} name="document-text-outline" size={20} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>Términos y normas</Text><Text style={styles.settingDescription}>Condiciones y convivencia</Text></View><Ionicons color={colors.muted} name="open-outline" size={18} /></Pressable>
+            <Pressable onPress={() => void openSitePage('/soporte')} style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}><View style={styles.settingIcon}><Ionicons color={colors.ink} name="help-circle-outline" size={20} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>Soporte</Text><Text style={styles.settingDescription}>Contacta con Color Club</Text></View><Ionicons color={colors.muted} name="open-outline" size={18} /></Pressable>
           </View>
         </>
       )}

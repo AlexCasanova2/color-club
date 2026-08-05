@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Body, Button, ErrorText, Field, Screen, Title } from '@/components/ui';
 import { colors } from '@/lib/theme';
 import { supabase } from '@/lib/supabase';
+import { emailConfirmationUrl, passwordRecoveryUrl } from '@/lib/authLinks';
+
+const siteUrl = (process.env.EXPO_PUBLIC_SITE_URL ?? 'https://getcolorclub.com').replace(/\/$/, '');
 
 export function AuthScreen() {
   const { height } = useWindowDimensions();
@@ -13,6 +16,8 @@ export function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [rulesAccepted, setRulesAccepted] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -41,13 +46,21 @@ export function AuthScreen() {
   async function submit() {
     setError(null);
     setMessage(null);
-    if (!email.trim() || password.length < 6 || (isSignUp && name.trim().length < 2)) {
+    if (!email.trim() || password.length < 6 || (isSignUp && (name.trim().length < 2 || !rulesAccepted))) {
+      if (isSignUp && !rulesAccepted) { setError('Debes aceptar las normas de la comunidad para crear una cuenta.'); return; }
       setError('Revisa los datos. La contraseña debe tener al menos 6 caracteres.');
       return;
     }
     setLoading(true);
     const result = isSignUp
-      ? await supabase.auth.signUp({ email: email.trim(), password, options: { data: { display_name: name.trim() } } })
+      ? await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: emailConfirmationUrl,
+          data: { display_name: name.trim(), community_rules_accepted_at: new Date().toISOString() },
+        },
+      })
       : await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
     if (result.error) setError(result.error.message);
@@ -62,7 +75,7 @@ export function AuthScreen() {
       return;
     }
     setLoading(true);
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: passwordRecoveryUrl });
     setLoading(false);
     if (resetError) setError(resetError.message);
     else setMessage('Te hemos enviado un enlace para recuperar tu contraseña.');
@@ -109,16 +122,84 @@ export function AuthScreen() {
           } />}
           <ErrorText message={error} />
           {message && <Text style={styles.message}>{message}</Text>}
+          {isSignUp && !isResettingPassword && <View style={styles.rulesRow}>
+            <Pressable accessibilityLabel="Aceptar normas de la comunidad" accessibilityRole="checkbox" accessibilityState={{ checked: rulesAccepted }} onPress={() => setRulesAccepted((accepted) => !accepted)} style={[styles.checkbox, rulesAccepted && styles.checkboxChecked]}>{rulesAccepted && <Ionicons color={colors.white} name="checkmark" size={16} />}</Pressable>
+            <Text style={styles.rulesText}>Acepto las <Text onPress={() => setRulesOpen(true)} style={styles.rulesLink}>normas de la comunidad</Text> y la política de tolerancia cero frente al abuso.</Text>
+          </View>}
           <Button label={isResettingPassword ? 'Enviar enlace' : isSignUp ? 'Crear mi cuenta' : 'Entrar al club'} onPress={isResettingPassword ? resetPassword : submit} loading={loading} />
           {!isSignUp && !isResettingPassword && <Button label="He olvidado mi contraseña" onPress={() => switchMode('reset')} variant="quiet" />}
           {isResettingPassword && <Button label="Volver al inicio de sesión" onPress={() => switchMode('login')} variant="quiet" />}
         </Animated.View>
+        <Modal animationType="fade" transparent visible={rulesOpen} onRequestClose={() => setRulesOpen(false)}>
+          <View style={styles.rulesModalRoot}>
+            <ScrollView contentContainerStyle={styles.rulesModalCard}>
+              <Text style={styles.formTitle}>Normas de la comunidad</Text>
+              <Text style={styles.rulesBody}>Color Club no permite acoso, amenazas, odio, contenido sexual, violencia, suplantación, spam ni compartir imágenes o datos de otras personas sin permiso.</Text>
+              <Text style={styles.rulesBody}>Puedes denunciar perfiles, mensajes y collages, y bloquear a cualquier usuario. Revisamos las denuncias y podemos retirar contenido o suspender cuentas que incumplan estas reglas.</Text>
+              <Button label="Entendido" onPress={() => setRulesOpen(false)} />
+            </ScrollView>
+          </View>
+        </Modal>
+        <View style={styles.legalLinks}>
+          <Text onPress={() => void Linking.openURL(`${siteUrl}/privacidad`)} style={styles.legalLink}>Privacidad</Text>
+          <Text onPress={() => void Linking.openURL(`${siteUrl}/terminos`)} style={styles.legalLink}>Términos</Text>
+          <Text onPress={() => void Linking.openURL(`${siteUrl}/soporte`)} style={styles.legalLink}>Soporte</Text>
+        </View>
+      </View>
+    </Screen>
+  );
+}
+
+export function ResetPasswordScreen({ error: linkError, onComplete }: { error?: string | null; onComplete: () => void }) {
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [error, setError] = useState<string | null>(linkError ?? null);
+  const [loading, setLoading] = useState(false);
+
+  async function updatePassword() {
+    if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres.'); return; }
+    if (password !== confirmation) { setError('Las contraseñas no coinciden.'); return; }
+    setLoading(true);
+    setError(null);
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setLoading(false);
+    if (updateError) setError(updateError.message);
+    else onComplete();
+  }
+
+  return (
+    <Screen bottomInset={24}>
+      <View style={styles.resetWrap}>
+        <View style={styles.mark}>
+          <View style={[styles.dot, { backgroundColor: colors.orange }]} />
+          <View style={[styles.dot, { backgroundColor: colors.yellow }]} />
+          <View style={[styles.dot, { backgroundColor: colors.ink }]} />
+        </View>
+        <View style={styles.formHeader}>
+          <Text style={styles.formTitle}>Crea una contraseña nueva</Text>
+          <Text style={styles.formSubtitle}>Usa al menos 8 caracteres y no reutilices una contraseña anterior.</Text>
+        </View>
+        <Field label="Nueva contraseña" value={password} onChangeText={setPassword} secureTextEntry />
+        <Field label="Repite la contraseña" value={confirmation} onChangeText={setConfirmation} secureTextEntry />
+        <ErrorText message={error} />
+        <Button label="Guardar contraseña" onPress={() => void updatePassword()} loading={loading} />
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  resetWrap: { flex: 1, justifyContent: 'center', gap: 18, paddingVertical: 24 },
+  rulesRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  checkbox: { width: 24, height: 24, borderRadius: 8, borderWidth: 2, borderColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: colors.ink },
+  rulesText: { flex: 1, color: colors.muted, fontSize: 13, lineHeight: 19 },
+  rulesLink: { color: colors.ink, fontWeight: '900', textDecorationLine: 'underline' },
+  rulesModalRoot: { flex: 1, backgroundColor: '#111217B8', justifyContent: 'center', padding: 20 },
+  rulesModalCard: { borderRadius: 34, backgroundColor: colors.paper, padding: 24, gap: 16 },
+  rulesBody: { color: colors.ink, fontSize: 15, lineHeight: 23 },
+  legalLinks: { flexDirection: 'row', justifyContent: 'center', gap: 18 },
+  legalLink: { color: colors.muted, fontSize: 12, fontWeight: '800', textDecorationLine: 'underline' },
   wrap: { flex: 1, justifyContent: 'center', gap: 18, paddingVertical: 24 },
   wrapCompact: { gap: 12, paddingVertical: 12 },
   wrapTiny: { justifyContent: 'flex-start', paddingVertical: 8 },

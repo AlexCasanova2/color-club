@@ -1,7 +1,7 @@
 import { decode } from 'base64-arraybuffer';
-import { resilientRead, retryWrite } from '@/lib/resilience';
+import { clearReadCache, requestResync, resilientRead, retryWrite } from '@/lib/resilience';
 import { supabase } from '@/lib/supabase';
-import type { ActivityItem, AppNotification, Challenge, Club, ClubIcon, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, ProfilePreview, PublicProfile, RankingRow, UserStats, Vote } from '@/types/domain';
+import type { ActivityItem, AppNotification, Challenge, Club, ClubIcon, ClubMember, ClubMessage, DurationPreset, Friendship, Participant, Photo, Profile, ProfilePreview, PublicProfile, RankingRow, ReportReason, ReportSubjectType, UserStats, Vote } from '@/types/domain';
 
 function isJwtFutureError(error: { message: string } | null) {
   return error?.message.toLowerCase().includes('jwt issued at future') ?? false;
@@ -215,6 +215,37 @@ export async function savePushToken(token: string, platform: string) {
     target_platform: platform,
   });
   fail(error);
+}
+
+export async function deletePushToken(token: string) {
+  const { error } = await supabase.rpc('delete_push_token', { target_token: token });
+  fail(error);
+}
+
+export async function blockUser(userId: string) {
+  const { error } = await supabase.rpc('block_user', { target_user_id: userId });
+  fail(error);
+  await clearReadCache();
+  requestResync();
+}
+
+export async function unblockUser(userId: string) {
+  const { error } = await supabase.rpc('unblock_user', { target_user_id: userId });
+  fail(error);
+  await clearReadCache();
+  requestResync();
+}
+
+export async function reportUser(userId: string, subjectType: ReportSubjectType, subjectId: string | null, reason: ReportReason, details?: string) {
+  const { data, error } = await supabase.rpc('submit_user_report', {
+    target_user_id: userId,
+    target_subject_type: subjectType,
+    target_subject_id: subjectId,
+    target_reason: reason,
+    target_details: details?.trim() || null,
+  });
+  fail(error);
+  return data as string;
 }
 
 export async function touchUserActivity() {
@@ -543,7 +574,7 @@ export async function uploadPhoto(participantId: string, slot: number, uri: stri
     reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
     reader.readAsDataURL(blob);
   });
-  const path = `${participantId}/${slot}-${Date.now()}.jpg`;
+  const path = `${participantId}/${slot}.jpg`;
   await retryWrite(async () => {
     const upload = await supabase.storage.from('collages').upload(path, decode(base64), {
       contentType: 'image/jpeg',

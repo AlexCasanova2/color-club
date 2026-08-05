@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PropsWithChildren, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, AppState, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,11 +11,12 @@ import { StatusBar } from 'expo-status-bar';
 import { FloatingMenu, type MenuTab } from '@/components/FloatingMenu';
 import { Body, Button, Card, Screen, SuccessModal, Title } from '@/components/ui';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { authLinkType } from '@/lib/authLinks';
 import { getUnreadNotificationCount, markNotificationRead, touchUserActivity } from '@/lib/api';
-import { registerForPushNotifications } from '@/lib/pushNotifications';
+import { registerForPushNotifications, signOutCurrentDevice } from '@/lib/pushNotifications';
 import { clearReadCache, requestResync, subscribeToCachedFallback } from '@/lib/resilience';
 import { colors } from '@/lib/theme';
-import { AuthScreen } from '@/screens/AuthScreen';
+import { AuthScreen, ResetPasswordScreen } from '@/screens/AuthScreen';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { AccountScreen } from '@/screens/AccountScreen';
 import { EditProfileScreen } from '@/screens/EditProfileScreen';
@@ -130,6 +131,7 @@ export default function App() {
   const [connectionRestored, setConnectionRestored] = useState(false);
   const [usingCachedData, setUsingCachedData] = useState(false);
   const [pushTarget, setPushTarget] = useState<PushTarget | null>(null);
+  const [recoveringPassword, setRecoveringPassword] = useState(false);
   const wasOffline = useRef(false);
 
   async function unlockWithFaceId() {
@@ -173,6 +175,7 @@ export default function App() {
     });
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
+      if (event === 'PASSWORD_RECOVERY') setRecoveringPassword(true);
       if (!nextSession) {
         void clearReadCache().catch(() => undefined);
         setBiometricUnlocked(false);
@@ -183,6 +186,23 @@ export default function App() {
       }
     });
     return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    async function handleAuthUrl(url: string | null) {
+      if (!url) return;
+      const linkType = authLinkType(url);
+      if (!linkType) return;
+      const code = new URL(url).searchParams.get('code');
+      if (!code) { Alert.alert('Enlace no válido', 'El enlace no es válido o ha caducado. Solicita uno nuevo.'); return; }
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) { Alert.alert('Enlace no válido', 'No hemos podido validar el enlace. Solicita uno nuevo desde la app.'); return; }
+      if (linkType === 'recovery') setRecoveringPassword(true);
+      else Alert.alert('Correo confirmado', 'Tu cuenta ya está lista. Te hemos llevado directamente a Color Club.');
+    }
+    void Linking.getInitialURL().then(handleAuthUrl);
+    const subscription = Linking.addEventListener('url', ({ url }) => void handleAuthUrl(url));
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
@@ -267,6 +287,15 @@ export default function App() {
     await AsyncStorage.setItem(onboardingStorageKey, 'true');
   }
 
+  async function signOut() {
+    if (!session) return;
+    setBiometricLoading(true);
+    setBiometricError(null);
+    try { await signOutCurrentDevice(session.user.id); }
+    catch { setBiometricError('No se pudo cerrar la sesión de forma segura. Revisa tu conexión e inténtalo de nuevo.'); }
+    finally { setBiometricLoading(false); }
+  }
+
   useEffect(() => {
     if (!session) return;
     void getUnreadNotificationCount(session.user.id).then(setUnreadNotifications).catch(() => undefined);
@@ -283,14 +312,15 @@ export default function App() {
 
   useEffect(() => {
     if (!session || !biometricUnlocked) return;
-    void registerForPushNotifications().catch(() => undefined);
+    void registerForPushNotifications(session.user.id).catch(() => undefined);
   }, [session?.user.id, biometricUnlocked]);
 
   if (!isSupabaseConfigured) return <><StatusBar style="dark" /><SetupScreen /></>;
   if (checking || checkingOnboarding) return <View style={styles.loading}><StatusBar style="dark" /><ActivityIndicator color={colors.coral} /></View>;
   if (!session && !hasSeenOnboarding) return <><StatusBar style="dark" /><OnboardingScreen onDone={() => void finishOnboarding()} /></>;
+  if (recoveringPassword) return <><StatusBar style="dark" /><ResetPasswordScreen onComplete={() => setRecoveringPassword(false)} /></>;
   if (!session) return <><StatusBar style="dark" /><AuthScreen /></>;
-  if (!biometricUnlocked) return <><StatusBar style="dark" /><BiometricLockScreen error={biometricError} loading={biometricLoading} onRetry={() => void unlockWithFaceId()} onSignOut={() => void supabase.auth.signOut()} /></>;
+  if (!biometricUnlocked) return <><StatusBar style="dark" /><BiometricLockScreen error={biometricError} loading={biometricLoading} onRetry={() => void unlockWithFaceId()} onSignOut={() => void signOut()} /></>;
 
   let content;
   if (route.name === 'home') {
@@ -298,7 +328,7 @@ export default function App() {
   } else if (route.name === 'activity') {
     content = <ActivityScreen userId={session.user.id} onOpenChallenge={(clubId, challengeId) => setRoute({ name: 'challenge', clubId, challengeId })} onOpenClub={(clubId) => setRoute({ name: 'club', clubId })} onOpenFriends={() => setRoute({ name: 'friends' })} onNotificationRead={() => setUnreadNotifications((current) => Math.max(0, current - 1))} />;
   } else if (route.name === 'account') {
-    content = <AccountScreen userId={session.user.id} email={session.user.email ?? ''} onEditProfile={() => setRoute({ name: 'edit-profile' })} onViewPublicProfile={() => setRoute({ name: 'public-profile', userId: session.user.id, backTo: 'account' })} toastMessage={accountToast} onToastShown={() => setAccountToast(null)} />;
+    content = <AccountScreen userId={session.user.id} email={session.user.email ?? ''} onEditProfile={() => setRoute({ name: 'edit-profile' })} onSignOut={() => void signOut()} onViewPublicProfile={() => setRoute({ name: 'public-profile', userId: session.user.id, backTo: 'account' })} toastMessage={accountToast} onToastShown={() => setAccountToast(null)} />;
   } else if (route.name === 'edit-profile') {
     content = <EditProfileScreen userId={session.user.id} onBack={() => setRoute({ name: 'account' })} onSaved={() => { setAccountToast('Perfil actualizado.'); setRoute({ name: 'account' }); }} />;
   } else if (route.name === 'friends') {

@@ -3,7 +3,8 @@ import { ActivityIndicator, Alert, Animated, Image, Pressable, StyleSheet, Text,
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Body, Button, Card, ErrorText, Header, Screen, Title } from '@/components/ui';
-import { getFriendshipWithUser, getPublicProfile, getUserStats, removeFriendship, respondFriendRequest, sendFriendRequest } from '@/lib/api';
+import { blockUser, getFriendshipWithUser, getPublicProfile, getUserStats, removeFriendship, reportUser, respondFriendRequest, sendFriendRequest } from '@/lib/api';
+import { chooseReportReason } from '@/lib/safety';
 import { colors } from '@/lib/theme';
 import type { Friendship, PublicProfile, UserStats } from '@/types/domain';
 
@@ -86,9 +87,41 @@ export function PublicProfileScreen({ userId, viewerUserId, onBack }: { userId: 
     ]);
   }
 
+  async function reportProfile(reason: Parameters<typeof reportUser>[3]) {
+    setSaving(true);
+    setError(null);
+    try {
+      await reportUser(userId, 'profile', null, reason);
+      Alert.alert('Denuncia enviada', 'Revisaremos este perfil. También puedes bloquear al usuario para dejar de ver su contenido.', [
+        { text: 'Cerrar' },
+        { text: 'Bloquear también', style: 'destructive', onPress: confirmBlock },
+      ]);
+    } catch (caught) { setError((caught as Error).message); }
+    setSaving(false);
+  }
+
+  function confirmBlock() {
+    Alert.alert('Bloquear usuario', 'Se eliminará la amistad y dejaréis de ver vuestros perfiles, mensajes y collages. Seguiréis formando parte de los clubs compartidos.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Bloquear', style: 'destructive', onPress: async () => {
+        setSaving(true);
+        try { await blockUser(userId); onBack(); }
+        catch (caught) { setError((caught as Error).message); setSaving(false); }
+      } },
+    ]);
+  }
+
+  function openSafetyActions() {
+    Alert.alert('Seguridad', `Acciones sobre ${profile?.display_name ?? 'este usuario'}.`, [
+      { text: 'Denunciar perfil', onPress: () => chooseReportReason((reason) => void reportProfile(reason)) },
+      { text: 'Bloquear usuario', style: 'destructive', onPress: confirmBlock },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  }
+
   return (
     <Screen stickyHeader>
-      <Header title="Perfil" onBack={onBack} />
+      <Header title="Perfil" onBack={onBack} action={userId !== viewerUserId ? <Pressable accessibilityLabel="Opciones de seguridad" accessibilityRole="button" disabled={saving} onPress={openSafetyActions} style={styles.safetyButton}><Ionicons color={colors.white} name="ellipsis-horizontal" size={21} /></Pressable> : undefined} />
       <ErrorText message={error} />
       {!profile && !error ? <ActivityIndicator style={styles.loader} color={colors.coral} /> : profile && (
         <>
@@ -240,4 +273,5 @@ const styles = StyleSheet.create({
   statValue: { color: colors.ink, fontSize: 24, lineHeight: 27, fontWeight: '900', letterSpacing: -0.5 },
   statLabel: { color: colors.muted, fontSize: 13, lineHeight: 16, fontWeight: '800' },
   achievementsCard: { marginTop: 14, gap: 10, backgroundColor: colors.green, borderWidth: 0 },
+  safetyButton: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#292A31', alignItems: 'center', justifyContent: 'center' },
 });

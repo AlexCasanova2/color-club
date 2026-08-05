@@ -37,7 +37,7 @@ Color Club es una app móvil social de retos fotográficos por color. Está cons
 - `src/types/domain.ts`: contratos de dominio compartidos por el cliente.
 - `src/components/`: primitivas visuales, dock, toast y componentes reutilizables.
 - `supabase/migrations/`: esquema, RLS, RPC, triggers, Realtime y Storage.
-- `supabase/functions/send-push-notification/`: única Edge Function; el avance de retos y temporadas se ejecuta con funciones PostgreSQL programables por Cron.
+- `supabase/functions/`: envío push y borrado completo de cuenta; el avance de retos y temporadas se ejecuta con funciones PostgreSQL programables por Cron.
 
 La navegación interna contempla Home, Actividad, Amigos, Cuenta, edición de perfil, club, chat, gestión, creación y detalle de reto, y perfil público. Al no existir un router, `npm run web` no proporcionaría todavía URLs, deep links ni restauración de ruta.
 
@@ -72,9 +72,10 @@ Cliente Expo local y builds EAS:
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://TU-PROYECTO.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=TU_CLAVE_ANON
+EXPO_PUBLIC_SITE_URL=https://getcolorclub.com
 ```
 
-Configura las variables públicas también en el entorno correspondiente de EAS; el workflow de GitHub no las inyecta. Nunca uses `SUPABASE_SERVICE_ROLE_KEY` en el cliente.
+Configura las variables públicas también en el entorno correspondiente de EAS; el workflow de GitHub no las inyecta. `EXPO_PUBLIC_SITE_URL` permite sustituir `https://getcolorclub.com` y debe servir `/privacidad`, `/terminos` y `/soporte`. Nunca uses `SUPABASE_SERVICE_ROLE_KEY` en el cliente.
 
 Secrets de la Edge Function, configurados con `supabase secrets set` y no en el `.env` de Expo:
 
@@ -121,6 +122,27 @@ La app registra tokens Expo en `push_tokens`. Para enviar push reales cuando se 
 5. Añade el header `x-push-webhook-secret` con el mismo valor de `PUSH_WEBHOOK_SECRET`.
 
 La función rechaza todas las peticiones si falta `PUSH_WEBHOOK_SECRET`; no despliegues el webhook sin configurar antes ese secret.
+
+### Seguridad Y Borrado De Cuenta
+
+Las migraciones `202608050002_user_safety.sql` y `202608050003_account_lifecycle.sql` añaden denuncia de perfiles, mensajes y collages, bloqueo bilateral, filtrado básico de texto, cola de moderación y relaciones compatibles con el borrado de cuenta.
+
+Despliega también la función autenticada que elimina avatares y collages antes de borrar el usuario:
+
+```sh
+supabase functions deploy delete-account
+```
+
+La cola operativa de moderación está en `user_reports`. Debe revisarse regularmente y actualizarse a `reviewing`, `actioned` o `dismissed`; el acceso está limitado a roles de plataforma `moderator` u `owner`.
+
+Añade estas URLs a **Authentication → URL Configuration → Redirect URLs** en Supabase:
+
+```text
+colorclub://auth/confirm
+colorclub://auth/reset-password
+```
+
+La primera abre la app al confirmar un registro y la segunda abre directamente el formulario de nueva contraseña. Sin esta configuración, Supabase rechazará los redirects incluidos en los emails.
 
 En iOS y Android las push requieren builds nativas de EAS; no funcionan como push reales dentro de Expo Go.
 
